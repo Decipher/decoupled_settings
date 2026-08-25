@@ -122,7 +122,12 @@ final readonly class SettingsResolver {
    */
   private function readObject(string $name, array $excluded_keys, CacheableMetadata $cacheability): array {
     if ($this->themeSettingsReader->isThemeSettings($name)) {
-      return $this->removeExcluded($name, $excluded_keys, $this->themeSettingsReader->read($name, $cacheability));
+      // Core's resolution merges more than the stored object, so its output
+      // goes through the same schema bounding as everything else. The
+      // computed logo and favicon URLs survive it: the theme_settings schema
+      // type declares them.
+      $data = $this->themeSettingsReader->read($name, $cacheability);
+      return $this->removeExcluded($name, $excluded_keys, $this->filterBySchema($name, $data));
     }
 
     $config = $this->configFactory->get($name);
@@ -173,7 +178,9 @@ final readonly class SettingsResolver {
       return [];
     }
 
-    $element = $this->typedConfigManager->get($name);
+    // Built from the given data, not the stored object: for theme settings
+    // the data is core's merged result, which the stored object never holds.
+    $element = $this->typedConfigManager->createFromNameAndData($name, $data);
     if (!$element instanceof ArrayElement) {
       return [];
     }
@@ -196,7 +203,10 @@ final readonly class SettingsResolver {
       if (!array_key_exists($key, $data)) {
         continue;
       }
-      if ($child->getDataDefinition()->getDataType() === 'undefined') {
+      $data_type = $child->getDataDefinition()->getDataType();
+      if ($data_type === 'undefined' || $data_type === 'ignore') {
+        // Undeclared keys are unknown, and ignore-typed keys are declared
+        // unknowable. Neither is exposed.
         continue;
       }
       $value = $data[$key];
