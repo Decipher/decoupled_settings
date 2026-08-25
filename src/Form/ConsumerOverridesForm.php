@@ -123,6 +123,18 @@ final class ConsumerOverridesForm extends FormBase {
       }
     }
 
+    // A stored override whose setting is not exposed any more has no row.
+    // It is kept on save, but silence would hide it forever, so name it.
+    $orphans = array_diff_key($overrides, $form['settings']);
+    if ($orphans) {
+      $this->messenger()->addWarning($this->formatPlural(
+        count($orphans),
+        'The stored override %keys has no exposed setting, so it has no effect. It is kept as it is. It applies again when its setting is exposed.',
+        'The stored overrides %keys have no exposed settings, so they have no effect. They are kept as they are. Each applies again when its setting is exposed.',
+        ['%keys' => implode(', ', array_keys($orphans))]
+      ));
+    }
+
     $form['actions'] = ['#type' => 'actions'];
     $form['actions']['submit'] = [
       '#type' => 'submit',
@@ -163,12 +175,16 @@ final class ConsumerOverridesForm extends FormBase {
   public function submitForm(array &$form, FormStateInterface $form_state): void {
     $globals = $this->resolver->resolve(NULL, new CacheableMetadata());
     $rows = $form_state->getValue('settings') ?: [];
-    $overrides = [];
+    // Start from the stored map, so an override whose setting is not
+    // exposed right now survives the save. A row can only change its own
+    // key. Unexposed keys are cleaned up by choice, not as a side effect.
+    $overrides = $this->currentOverrides();
 
     foreach ($rows as $key => $row) {
       if (empty($row['enabled'])) {
-        // Unticked means inherited. The key is left out entirely rather than
-        // stored as an empty value, which would mean "deliberately blank".
+        // Unticked means inherited. The key is removed rather than stored
+        // as an empty value, which would mean "deliberately blank".
+        unset($overrides[$key]);
         continue;
       }
       $overrides[$key] = $this->castToGlobalType($key, (string) $row['value'], $globals);
