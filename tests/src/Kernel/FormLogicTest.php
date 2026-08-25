@@ -187,6 +187,58 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * An override for a setting that is not exposed survives a save.
+   *
+   * The exposure list can shrink, and a theme switch renames every
+   * theme-settings key. Neither renders a row for the stored override, and
+   * a save of unrelated rows must not delete it.
+   */
+  public function testUnexposedOverrideSurvivesSave(): void {
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'system.site:name' => 'Consumer Site',
+        'olivero.settings:logo.url' => '/old-theme-logo.svg',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'system.site:name' => ['enabled' => 1, 'value' => 'Renamed Site'],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertSame([
+      'system.site:name' => 'Renamed Site',
+      'olivero.settings:logo.url' => '/old-theme-logo.svg',
+    ], $this->reloadOverrides($consumer_id));
+  }
+
+  /**
+   * The form names stored overrides that have no exposed setting.
+   */
+  public function testOrphanedOverrideIsAnnounced(): void {
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'olivero.settings:logo.url' => '/old-theme-logo.svg',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $warnings = $this->container->get('messenger')->messagesByType('warning');
+    $this->assertCount(1, $warnings);
+    $this->assertStringContainsString('olivero.settings:logo.url', (string) $warnings[0]);
+  }
+
+  /**
    * Clearing every override still stores an empty map, never NULL.
    *
    * A field with no items persists NULL, which Drupal 10 unserializes without a
