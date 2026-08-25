@@ -100,6 +100,13 @@ request from the token's consumer, so an authenticated app is identified by
 its token alone. The OAuth client and the settings consumer are the same
 entity.
 
+**Q: How do translations interact with overrides?**
+
+**A:** Exposed values follow interface language negotiation: a request on a
+language prefix reads that language's config translations. Per-consumer
+overrides do not: an override replaces its setting in every language. A
+setting can be translated, or overridden per consumer, not both at once.
+
 **Q: Can a frontend write settings back?**
 
 **A:** No. The exposed surface is read-only.
