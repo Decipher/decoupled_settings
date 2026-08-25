@@ -71,6 +71,4 @@ and this project adheres to
   functional coverage of both administrative pages.
 
 ### Known limitations
-- Only Drupal 11 has been exercised. The version shim exists for Drupal 10 and
-  is the one branch Drupal 11 never runs, so it is unverified.
 - Translation and language negotiation of exposed values is not handled.
