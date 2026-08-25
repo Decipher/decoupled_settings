@@ -187,6 +187,40 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * Clearing every override still stores an empty map, never NULL.
+   *
+   * A field with no items persists NULL, which Drupal 10 unserializes without a
+   * null guard on every following load of the consumer.
+   */
+  public function testClearingAllOverridesKeepsTheColumn(): void {
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => ['system.site:name' => 'Was set'],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'system.site:name' => ['enabled' => 0, 'value' => ''],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertSame([], $this->reloadOverrides($consumer_id));
+
+    // The column itself is what Drupal 10 unserializes without a null
+    // guard, so that is what must never be NULL.
+    $value = $this->container->get('database')
+      ->select('consumer_field_data', 'c')
+      ->fields('c', [SettingsResolver::OVERRIDE_FIELD])
+      ->condition('id', $consumer_id)
+      ->execute()->fetchField();
+    $this->assertSame(serialize([]), $value);
+  }
+
+  /**
    * A submitted value is cast back to the type of the value it overrides.
    *
    * A boolean setting submitted as "0" must be stored as FALSE, not as the

@@ -174,7 +174,9 @@ final class ConsumerOverridesForm extends FormBase {
       $overrides[$key] = $this->castToGlobalType($key, (string) $row['value'], $globals);
     }
 
-    $this->consumer->set(SettingsResolver::OVERRIDE_FIELD, $overrides);
+    // Always one item, even empty: a field with no items stores NULL, which
+    // Drupal 10 unserializes without a null guard on every following load.
+    $this->consumer->set(SettingsResolver::OVERRIDE_FIELD, [$overrides]);
     $this->consumer->save();
 
     $this->messenger()->addStatus($this->formatPlural(
