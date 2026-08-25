@@ -63,6 +63,27 @@ class DenyOnConsumerHeaderTest extends UnitTestCase {
   }
 
   /**
+   * A path prefix in front of the base path is still the settings resource.
+   *
+   * A language prefix is the common case. The page cache stores by URL, so
+   * every prefixed variant of the endpoint must be denied too, or a cached
+   * consumer response leaks to requests that name no consumer.
+   */
+  public function testDeniesThePrefixedSettingsResourceWithHeader(): void {
+    $policy = new DenyOnConsumerHeader('/jsonapi');
+
+    $this->assertSame(
+      RequestPolicyInterface::DENY,
+      $policy->check($this->request('/fr/jsonapi/decoupled/settings', 'app'))
+    );
+    $this->assertSame(
+      RequestPolicyInterface::DENY,
+      $policy->check($this->request('/subdir/jsonapi/decoupled/settings', 'app'))
+    );
+    $this->assertNull($policy->check($this->request('/fr/jsonapi/node/article', 'app')));
+  }
+
+  /**
    * A configured JSON:API base path moves the guarded path with it.
    */
   public function testRespectsTheConfiguredBasePath(): void {

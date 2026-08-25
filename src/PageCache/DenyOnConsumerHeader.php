@@ -36,7 +36,11 @@ final readonly class DenyOnConsumerHeader implements RequestPolicyInterface {
       return NULL;
     }
 
-    return $request->getPathInfo() === $this->jsonapiBasePath . '/decoupled/settings'
+    // Not an equality check. A language prefix, or any other prefix a site
+    // puts in front of the JSON:API base path, would make an exact match
+    // miss. The page cache would then store one consumer's settings under a
+    // URL every other consumer also requests.
+    return str_ends_with($request->getPathInfo(), $this->jsonapiBasePath . '/decoupled/settings')
       ? self::DENY
       : NULL;
   }
