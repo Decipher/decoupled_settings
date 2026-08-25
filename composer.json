@@ -1,0 +1,18 @@
+{
+    "name": "drupal/decoupled_settings",
+    "description": "Exposes allowlisted simple config over JSON:API, with global values and per-consumer overrides.",
+    "type": "drupal-module",
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Stuart Clark",
+            "homepage": "https://www.drupal.org/u/deciphered",
+            "role": "Maintainer"
+        }
+    ],
+    "require": {
+        "php": ">=8.3",
+        "drupal/consumers": "^1.0",
+        "drupal/jsonapi_resources": "^1.0"
+    }
+}

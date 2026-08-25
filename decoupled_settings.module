@@ -1,0 +1,150 @@
+<?php
+
+/**
+ * @file
+ * Exposes allowlisted simple config, with per-consumer overrides.
+ */
+
+declare(strict_types=1);
+
+use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Entity\EntityFormInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\decoupled_settings\SettingsResolver;
+
+/**
+ * Implements hook_help().
+ */
+function decoupled_settings_help(string $route_name, RouteMatchInterface $route_match): ?string {
+  return match ($route_name) {
+    'decoupled_settings.settings' => '<p>' . t('Decoupled Settings shows site and theme settings to a decoupled frontend. Only the config objects on the exposure list can be read, and only the keys their schema declares.') . '</p>',
+    'decoupled_settings.consumer_overrides' => '<p>' . t('A consumer overrides only the settings it names. Everything else is inherited, and follows the site value when it changes.') . '</p>',
+    default => NULL,
+  };
+}
+
+/**
+ * Implements hook_entity_base_field_info().
+ *
+ * Adds the override store to the consumer entity. The field holds only the
+ * settings a consumer overrides. A setting that is absent is inherited, so
+ * adding a consumer costs only what it actually changes.
+ */
+function decoupled_settings_entity_base_field_info(EntityTypeInterface $entity_type): array {
+  $fields = [];
+
+  if ($entity_type->id() === 'consumer') {
+    $fields[SettingsResolver::OVERRIDE_FIELD] = BaseFieldDefinition::create('decoupled_settings_overrides')
+      ->setLabel(t('Setting overrides'))
+      ->setDescription(t('Settings this consumer overrides. Anything not listed is inherited.'))
+      // One empty item by default: Drupal 10's storage unserializes the
+      // column without a null guard, so the column must never be NULL.
+      ->setDefaultValue([[]])
+      ->setRevisionable(TRUE);
+  }
+
+  return $fields;
+}
+
+/**
+ * Implements hook_consumers_list_alter().
+ *
+ * Shows how many settings a consumer overrides, so the list says at a glance
+ * which consumers differ from the site.
+ */
+function decoupled_settings_consumers_list_alter(array &$data, array $context): void {
+  if ($context['type'] === 'header') {
+    $data['decoupled_settings'] = t('Overrides');
+    return;
+  }
+
+  // The list builder passes the consumer as 'entity'.
+  $consumer = $context['entity'] ?? NULL;
+  $count = 0;
+  if ($consumer instanceof ConsumerInterface && $consumer->hasField(SettingsResolver::OVERRIDE_FIELD)) {
+    $field = $consumer->get(SettingsResolver::OVERRIDE_FIELD);
+    $count = $field->isEmpty() ? 0 : count((array) $field->first()->getValue());
+  }
+
+  $data['decoupled_settings'] = ['data' => ['#markup' => (string) $count]];
+}
+
+/**
+ * Implements hook_entity_operation().
+ *
+ * Puts the Settings form in the consumer list's operations dropbutton, next
+ * to Edit and Delete.
+ */
+function decoupled_settings_entity_operation(EntityInterface $entity, ?CacheableMetadata $cacheability = NULL): array {
+  // Drupal 11.3 passes the cacheability collector. Drupal 10 does not, so
+  // the parameter stays optional until Drupal 10 support ends.
+  $cacheability?->addCacheContexts(['user.permissions']);
+
+  if ($entity->getEntityTypeId() !== 'consumer'
+    || !\Drupal::currentUser()->hasPermission('administer decoupled settings')) {
+    return [];
+  }
+
+  return [
+    'decoupled_settings' => [
+      'title' => t('Settings'),
+      'url' => Url::fromRoute('decoupled_settings.consumer_overrides', ['consumer' => $entity->id()]),
+      'weight' => 15,
+    ],
+  ];
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for consumer_form.
+ *
+ * The Settings local task lives in the Navigation top bar on sites that use
+ * it, which is easy to miss. This puts a visible pointer on the form people
+ * actually edit consumers with.
+ */
+function decoupled_settings_form_consumer_form_alter(array &$form, FormStateInterface $form_state): void {
+  if (!\Drupal::currentUser()->hasPermission('administer decoupled settings')) {
+    return;
+  }
+  $form_object = $form_state->getFormObject();
+  if (!$form_object instanceof EntityFormInterface) {
+    return;
+  }
+  $consumer = $form_object->getEntity();
+  if (!$consumer instanceof ConsumerInterface || $consumer->isNew()) {
+    return;
+  }
+
+  $count = 0;
+  if ($consumer->hasField(SettingsResolver::OVERRIDE_FIELD)) {
+    $field = $consumer->get(SettingsResolver::OVERRIDE_FIELD);
+    $count = $field->isEmpty() ? 0 : count((array) $field->first()->getValue());
+  }
+
+  $form['decoupled_settings'] = [
+    '#type' => 'details',
+    '#title' => t('Decoupled settings'),
+    '#open' => FALSE,
+    '#weight' => 90,
+    'summary' => [
+      '#markup' => \Drupal::translation()->formatPlural(
+        $count,
+        'This consumer overrides 1 setting.',
+        'This consumer overrides @count settings.'
+      ),
+    ],
+    'link' => [
+      '#type' => 'link',
+      '#title' => t('Edit setting overrides'),
+      '#url' => Url::fromRoute('decoupled_settings.consumer_overrides', ['consumer' => $consumer->id()]),
+      '#attributes' => ['class' => ['button', 'button--small']],
+      '#prefix' => '<p>',
+      '#suffix' => '</p>',
+    ],
+  ];
+}

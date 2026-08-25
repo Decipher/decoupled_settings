@@ -1,0 +1,5 @@
+decoupled_settings.settings:
+  title: 'Decoupled Settings'
+  description: 'Choose which config is exposed to decoupled frontends.'
+  route_name: decoupled_settings.settings
+  parent: system.admin_config_services

@@ -1,0 +1,23 @@
+decoupled_settings.settings:
+  type: config_object
+  label: 'Decoupled Settings'
+  mapping:
+    exposed_objects:
+      type: sequence
+      label: 'Exposed config objects'
+      sequence:
+        type: string
+        label: 'Config object name'
+    expose_theme_settings:
+      type: boolean
+      label: 'Expose the active theme settings'
+    excluded_keys:
+      type: sequence
+      label: 'Never exposed keys'
+      sequence:
+        type: string
+        label: 'Config object name and setting path'
+
+field.storage_settings.decoupled_settings_override_map:
+  type: mapping
+  label: 'Consumer setting overrides'

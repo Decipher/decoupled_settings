@@ -1,0 +1,42 @@
+/**
+ * Give the override value column room, and let its inputs fill it.
+ *
+ * Mobile first: on a narrow screen the columns share the width evenly, long
+ * setting names break, and the inputs shrink with their cells. The
+ * responsive table library hides the priority-medium columns there. From
+ * tablet width up, the value column takes its 45 percent.
+ */
+#decoupled-settings-overrides {
+  width: 100%;
+}
+
+#decoupled-settings-overrides td:first-child {
+  overflow-wrap: anywhere;
+}
+
+#decoupled-settings-overrides td:last-child input[type="text"],
+#decoupled-settings-overrides td:last-child input[type="number"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 48em) {
+  #decoupled-settings-overrides td:last-child {
+    width: 45%;
+  }
+}
+
+/**
+ * The add-new table row: select and button on one line, like the image
+ * style effects form's new-effect row.
+ */
+td.decoupled-settings-new .form-item {
+  display: inline-block;
+  margin: 0 0.5rem 0 0;
+  vertical-align: middle;
+}
+
+td.decoupled-settings-new .button {
+  vertical-align: middle;
+}
