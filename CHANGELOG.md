@@ -71,4 +71,6 @@ and this project adheres to
   functional coverage of both administrative pages.
 
 ### Known limitations
-- Translation and language negotiation of exposed values is not handled.
+- Exposed values follow interface language negotiation, but a per-consumer
+  override applies in every language. A setting can be translated, or
+  overridden per consumer, not both at once.
