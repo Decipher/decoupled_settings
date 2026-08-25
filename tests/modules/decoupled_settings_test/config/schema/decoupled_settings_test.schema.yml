@@ -1,0 +1,10 @@
+decoupled_settings_test.settings:
+  type: config_object
+  label: 'Decoupled Settings test settings'
+  mapping:
+    safe:
+      type: string
+      label: 'A plain declared string'
+    secret_blob:
+      type: ignore
+      label: 'Declared unknowable'

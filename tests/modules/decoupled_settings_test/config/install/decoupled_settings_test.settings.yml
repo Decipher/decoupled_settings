@@ -1,0 +1,3 @@
+safe: 'visible'
+secret_blob:
+  nested: 'must never appear'

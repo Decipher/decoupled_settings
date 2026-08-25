@@ -251,6 +251,81 @@ class SettingsResolverTest extends KernelTestBase {
   }
 
   /**
+   * An ignore-typed schema key is never exposed.
+   *
+   * Declared unknowable is not declared safe: its raw value, nested
+   * included, must not fall through the filter.
+   */
+  public function testIgnoreTypedKeyIsNotExposed(): void {
+    $this->enableModules(['decoupled_settings_test']);
+    $this->installConfig(['decoupled_settings_test']);
+    $this->config('decoupled_settings.settings')
+      ->set('exposed_objects', ['decoupled_settings_test.settings'])
+      ->save();
+    // enableModules() rebuilt the container; the resolver from setUp() holds
+    // the old one.
+    $this->resolver = $this->container->get('decoupled_settings.resolver');
+
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+
+    $this->assertSame('visible', $resolved['decoupled_settings_test.settings']['safe']);
+    $this->assertArrayNotHasKey('secret_blob', $resolved['decoupled_settings_test.settings']);
+  }
+
+  /**
+   * An undeclared key smuggled into theme settings is not exposed.
+   *
+   * Core's resolution merges the stored object over its defaults, so a key
+   * written straight to storage would ride along without the schema bound.
+   * The computed favicon URL survives the same filter: the theme_settings
+   * schema type declares it.
+   */
+  public function testUndeclaredThemeKeyIsNotExposed(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+
+    $storage = $this->container->get('config.storage');
+    $data = $storage->read('stark.settings') ?: [];
+    $data['sneaky'] = 'should not appear';
+    $storage->write('stark.settings', $data);
+
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+
+    $this->assertArrayNotHasKey('sneaky', $resolved['stark.settings']);
+    $this->assertArrayHasKey('url', $resolved['stark.settings']['favicon']);
+  }
+
+  /**
+   * The install hook backfills consumers that predate the module.
+   *
+   * A direct database check on purpose: the point of the backfill is the
+   * raw column value that Drupal 10 unserializes without a null guard.
+   */
+  public function testInstallBackfillsNullOverrideColumns(): void {
+    $consumer = Consumer::create([
+      'client_id' => 'legacy_consumer',
+      'label' => 'Legacy consumer',
+    ]);
+    $consumer->save();
+
+    $connection = $this->container->get('database');
+    $connection->update('consumer_field_data')
+      ->fields([SettingsResolver::OVERRIDE_FIELD => NULL])
+      ->condition('id', $consumer->id())
+      ->execute();
+
+    $this->container->get('module_handler')->loadInclude('decoupled_settings', 'install');
+    decoupled_settings_install();
+
+    $value = $connection->select('consumer_field_data', 'c')
+      ->fields('c', [SettingsResolver::OVERRIDE_FIELD])
+      ->condition('id', $consumer->id())
+      ->execute()->fetchField();
+    $this->assertSame(serialize([]), $value);
+  }
+
+  /**
    * A consumer reads its overrides, and inherits everything else.
    */
   public function testConsumerOverridesAndInherits(): void {
