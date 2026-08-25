@@ -1,0 +1,9 @@
+settings-filter:
+  css:
+    theme:
+      css/decoupled-settings.admin.css: {}
+  js:
+    js/settings-filter.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

@@ -1,0 +1,19 @@
+# The consumers module defines no local tasks of its own, so this module
+# provides the whole tab group: View and Edit for the consumer entity, and
+# the Settings tab this module adds. Tabs only render when at least two
+# tasks share a base route.
+decoupled_settings.consumer_view:
+  title: 'View'
+  route_name: entity.consumer.canonical
+  base_route: entity.consumer.canonical
+
+decoupled_settings.consumer_edit:
+  title: 'Edit'
+  route_name: entity.consumer.edit_form
+  base_route: entity.consumer.canonical
+
+decoupled_settings.consumer_overrides:
+  title: 'Settings'
+  route_name: decoupled_settings.consumer_overrides
+  base_route: entity.consumer.canonical
+  weight: 10

@@ -1,0 +1,30 @@
+<?php
+
+/**
+ * @file
+ * Install and update hooks for Decoupled Settings.
+ */
+
+declare(strict_types=1);
+
+use Drupal\decoupled_settings\SettingsResolver;
+
+/**
+ * Implements hook_install().
+ *
+ * Consumers that existed before this module got a NULL overrides column,
+ * and Drupal 10's storage unserializes it without a null guard. Backfill
+ * an empty map instead. A direct query on purpose: loading the entities
+ * would trip the very deprecation this avoids.
+ */
+function decoupled_settings_install(): void {
+  $connection = \Drupal::database();
+  foreach (['consumer_field_data', 'consumer_field_revision'] as $table) {
+    if ($connection->schema()->tableExists($table)) {
+      $connection->update($table)
+        ->fields([SettingsResolver::OVERRIDE_FIELD => serialize([])])
+        ->isNull(SettingsResolver::OVERRIDE_FIELD)
+        ->execute();
+    }
+  }
+}

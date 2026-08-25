@@ -1,0 +1,10 @@
+# Only config objects listed here are readable. This list is the security
+# boundary. A schema alone does not make an object readable.
+exposed_objects:
+  - system.site
+# Set to true to also expose the settings of the active theme.
+expose_theme_settings: true
+# Keys that are never exposed, even though their schema declares them.
+# Schema bounds the shape of an object, not the sensitivity of its values.
+excluded_keys:
+  - 'system.site:mail'
