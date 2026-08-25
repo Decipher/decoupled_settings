@@ -28,3 +28,21 @@ function decoupled_settings_install(): void {
     }
   }
 }
+
+/**
+ * Exclude system.site:mail_notification from the exposed settings.
+ *
+ * The shipped exclude list held system.site:mail but not the notification
+ * address next to it. Append it for existing installs. A site that wants
+ * the key exposed can remove it again: this hook runs once.
+ */
+function decoupled_settings_update_10001(): string {
+  $config = \Drupal::configFactory()->getEditable('decoupled_settings.settings');
+  $excluded = $config->get('excluded_keys') ?? [];
+  if (!in_array('system.site:mail_notification', $excluded, TRUE)) {
+    $excluded[] = 'system.site:mail_notification';
+    $config->set('excluded_keys', $excluded)->save();
+    return 'system.site:mail_notification is now excluded.';
+  }
+  return 'system.site:mail_notification was already excluded.';
+}
