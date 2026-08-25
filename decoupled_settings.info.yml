@@ -1,0 +1,9 @@
+name: 'Decoupled Settings'
+type: module
+description: 'Exposes allowlisted simple config over JSON:API, with global values and per-consumer overrides.'
+package: 'Web services'
+core_version_requirement: ^10.3 || ^11
+dependencies:
+  - drupal:jsonapi
+  - consumers:consumers
+  - jsonapi_resources:jsonapi_resources

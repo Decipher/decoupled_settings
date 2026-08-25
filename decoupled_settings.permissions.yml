@@ -1,0 +1,8 @@
+'read decoupled settings':
+  title: 'Read decoupled settings'
+  description: 'Read the exposed site and theme settings over the API.'
+
+'administer decoupled settings':
+  title: 'Administer decoupled settings'
+  description: 'Choose which config is exposed, and edit a consumer''s overrides.'
+  restrict access: true

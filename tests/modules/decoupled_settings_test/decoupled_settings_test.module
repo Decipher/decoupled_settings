@@ -1,0 +1,23 @@
+<?php
+
+/**
+ * @file
+ * Contributes settings through the alter hook, for testing.
+ */
+
+declare(strict_types=1);
+
+use Drupal\Core\Cache\CacheableMetadata;
+
+/**
+ * Implements hook_decoupled_settings_global_alter().
+ */
+function decoupled_settings_test_decoupled_settings_global_alter(array &$globals, CacheableMetadata $cacheability): void {
+  $cacheability->addCacheTags(['decoupled_settings_test']);
+
+  $globals['test_group'] = [
+    'order' => ['header', 'content', 'footer'],
+    'label' => 'Contributed',
+    'nested' => ['depth' => 2],
+  ];
+}

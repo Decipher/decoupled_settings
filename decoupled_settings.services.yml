@@ -1,0 +1,24 @@
+services:
+  decoupled_settings.theme_settings_reader:
+    class: Drupal\decoupled_settings\ThemeSettingsReader
+    arguments:
+      - '@config.factory'
+      - '@?Drupal\Core\Extension\ThemeSettingsProvider'
+
+  decoupled_settings.merger:
+    class: Drupal\decoupled_settings\SettingsMerger
+
+  decoupled_settings.resolver:
+    class: Drupal\decoupled_settings\SettingsResolver
+    arguments:
+      - '@config.factory'
+      - '@config.typed'
+      - '@decoupled_settings.theme_settings_reader'
+      - '@decoupled_settings.merger'
+      - '@module_handler'
+
+  decoupled_settings.page_cache_deny_consumer_header:
+    class: Drupal\decoupled_settings\PageCache\DenyOnConsumerHeader
+    public: false
+    tags:
+      - { name: page_cache_request_policy }

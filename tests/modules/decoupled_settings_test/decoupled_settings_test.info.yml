@@ -1,0 +1,7 @@
+name: 'Decoupled Settings test'
+type: module
+description: 'Contributes settings through the alter hook, for testing.'
+package: Testing
+core_version_requirement: ^10.3 || ^11
+dependencies:
+  - decoupled_settings:decoupled_settings

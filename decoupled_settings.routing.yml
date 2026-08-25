@@ -1,0 +1,27 @@
+decoupled_settings.settings:
+  path: '/admin/config/services/decoupled-settings'
+  defaults:
+    _form: '\Drupal\decoupled_settings\Form\SettingsForm'
+    _title: 'Decoupled Settings'
+  requirements:
+    _permission: 'administer decoupled settings'
+
+decoupled_settings.consumer_overrides:
+  path: '/admin/config/services/consumer/{consumer}/decoupled-settings'
+  defaults:
+    _form: '\Drupal\decoupled_settings\Form\ConsumerOverridesForm'
+    _title: 'Settings'
+  options:
+    parameters:
+      consumer:
+        type: 'entity:consumer'
+  requirements:
+    _permission: 'administer decoupled settings'
+
+decoupled_settings.jsonapi.settings:
+  path: '/%jsonapi%/decoupled/settings'
+  defaults:
+    _jsonapi_resource: Drupal\decoupled_settings\Resource\SettingsResource
+  methods: [GET]
+  requirements:
+    _permission: 'read decoupled settings'
