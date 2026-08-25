@@ -19,13 +19,26 @@ use Symfony\Component\HttpFoundation\Request;
  * page cache ignores cache contexts, so the header path must not use it at
  * all.
  */
-final class DenyOnConsumerHeader implements RequestPolicyInterface {
+final readonly class DenyOnConsumerHeader implements RequestPolicyInterface {
+
+  public function __construct(
+    private string $jsonapiBasePath,
+  ) {}
 
   /**
    * {@inheritdoc}
    */
   public function check(Request $request): ?string {
-    return $request->headers->has('X-Consumer-ID') ? self::DENY : NULL;
+    // Request policies run before routing, so the path is compared as text.
+    // Only the settings resource is denied: other pages carrying the header
+    // keep their page cache, whatever they do with it.
+    if (!$request->headers->has('X-Consumer-ID')) {
+      return NULL;
+    }
+
+    return $request->getPathInfo() === $this->jsonapiBasePath . '/decoupled/settings'
+      ? self::DENY
+      : NULL;
   }
 
 }
