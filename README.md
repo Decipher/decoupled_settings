@@ -102,10 +102,10 @@ and it is `null` when none was.
 **A:** Yes, and with no extra setup. Simple OAuth sets `X-Consumer-ID` on the
 request from the token's consumer, so an authenticated app is identified by
 its token alone. The OAuth client and the settings consumer are the same
-entity. Verified against simple_oauth 6.x. There is no hard dependency, so
-if that interop ever changes, a token-authenticated request falls back to
-the global values rather than erroring: one more reason to assert on
-`data.attributes.consumer`.
+entity. A functional test pins this against simple_oauth 6.x. There is no
+hard dependency, so if that interop ever changes, a token-authenticated
+request falls back to the global values rather than erroring: one more
+reason to assert on `data.attributes.consumer`.
 
 **Q: How do translations interact with overrides?**
 
