@@ -148,6 +148,27 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * A setting with no value is listed with an empty inherited cell.
+   *
+   * The notification address is NULL on a fresh site. It is excluded by
+   * default, so this exposes it on purpose to render the NULL path.
+   */
+  public function testOverrideFormListsNullValueAsEmpty(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('excluded_keys', [])
+      ->save();
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $this->assertArrayHasKey('system.site:mail_notification', $form['settings']);
+    $this->assertSame('', $form['settings']['system.site:mail_notification']['inherited']['#markup']);
+  }
+
+  /**
    * An already overridden setting is shown as ticked, with its own value.
    */
   public function testOverrideFormShowsExistingOverride(): void {
