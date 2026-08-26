@@ -85,18 +85,35 @@ class JsonApiSettingsResourceLanguagePrefixTest extends BrowserTestBase {
   }
 
   /**
-   * A header response on the prefixed path is not served to anonymous.
+   * A header response on any spelling of the path is not served to anonymous.
+   *
+   * @dataProvider providerPaths
    */
-  public function testPrefixedHeaderRequestDoesNotPoisonSharedCache(): void {
-    $identified = $this->fetch('/fr/jsonapi/decoupled/settings', ['X-Consumer-ID' => 'consumer_a']);
+  public function testHeaderRequestDoesNotPoisonSharedCache(string $path): void {
+    $identified = $this->fetch($path, ['X-Consumer-ID' => 'consumer_a']);
     $this->assertSame('consumer_a', $identified['data']['attributes']['consumer']);
     $this->assertSame('Site A', $identified['data']['attributes']['settings']['system.site']['name']);
 
     // The same URL with no consumer must answer with the global values,
     // not a cached copy of the identified response.
-    $anonymous = $this->fetch('/fr/jsonapi/decoupled/settings');
+    $anonymous = $this->fetch($path);
     $this->assertNull($anonymous['data']['attributes']['consumer']);
     $this->assertSame('Global Site', $anonymous['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * Spellings of the endpoint the router accepts.
+   *
+   * A percent-encoded spelling is covered by the unit test only: the test
+   * client re-encodes the percent sign, so it cannot reach the router here.
+   */
+  public static function providerPaths(): array {
+    return [
+      'language prefix' => ['/fr/jsonapi/decoupled/settings'],
+      'trailing slash' => ['/jsonapi/decoupled/settings/'],
+      'prefixed trailing slash' => ['/fr/jsonapi/decoupled/settings/'],
+      'upper case' => ['/JSONAPI/decoupled/settings'],
+    ];
   }
 
 }

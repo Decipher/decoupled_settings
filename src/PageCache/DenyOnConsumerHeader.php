@@ -16,33 +16,25 @@ use Symfony\Component\HttpFoundation\Request;
  * X-Consumer-ID header does not: the URL is the same for every consumer, so
  * the page cache would serve one consumer's settings to the next. The
  * headers cache context protects the dynamic page cache, but the internal
- * page cache ignores cache contexts, so the header path must not use it at
- * all.
+ * page cache ignores cache contexts, so a header-identified request must
+ * not use it at all.
+ *
+ * The header is the whole test. Request policies run before routing, so
+ * there is no reliable way to tell "the settings resource" apart from any
+ * other path here: the router lowercases, decodes, trims slashes and
+ * resolves aliases before it matches, and a text comparison of the raw path
+ * misses every one of those spellings. Each miss is a cached response
+ * served to the wrong consumer. A request that carries the header pays
+ * with the internal page cache on every path instead, and keeps the
+ * dynamic page cache, which varies correctly.
  */
-final readonly class DenyOnConsumerHeader implements RequestPolicyInterface {
-
-  public function __construct(
-    private string $jsonapiBasePath,
-  ) {}
+final class DenyOnConsumerHeader implements RequestPolicyInterface {
 
   /**
    * {@inheritdoc}
    */
   public function check(Request $request): ?string {
-    // Request policies run before routing, so the path is compared as text.
-    // Only the settings resource is denied: other pages carrying the header
-    // keep their page cache, whatever they do with it.
-    if (!$request->headers->has('X-Consumer-ID')) {
-      return NULL;
-    }
-
-    // Not an equality check. A language prefix, or any other prefix a site
-    // puts in front of the JSON:API base path, would make an exact match
-    // miss. The page cache would then store one consumer's settings under a
-    // URL every other consumer also requests.
-    return str_ends_with($request->getPathInfo(), $this->jsonapiBasePath . '/decoupled/settings')
-      ? self::DENY
-      : NULL;
+    return $request->headers->has('X-Consumer-ID') ? self::DENY : NULL;
   }
 
 }

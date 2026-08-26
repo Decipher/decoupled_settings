@@ -20,7 +20,5 @@ services:
   decoupled_settings.page_cache_deny_consumer_header:
     class: Drupal\decoupled_settings\PageCache\DenyOnConsumerHeader
     public: false
-    arguments:
-      - '%jsonapi.base_path%'
     tags:
       - { name: page_cache_request_policy }
