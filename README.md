@@ -93,16 +93,38 @@ site value when it changes.
 parameter. A request that names no consumer, or one that does not exist,
 reads the global values.
 
+That fallback is deliberate, and it means a typo in a build variable ships
+the global branding with a green build. Assert on `data.attributes.consumer`
+in your build pipeline: it echoes the consumer that was actually resolved,
+and it is `null` when none was.
+
 **Q: Does this work with Simple OAuth?**
 
 **A:** Yes, and with no extra setup. Simple OAuth sets `X-Consumer-ID` on the
 request from the token's consumer, so an authenticated app is identified by
 its token alone. The OAuth client and the settings consumer are the same
-entity.
+entity. A functional test pins this against simple_oauth 6.x. There is no
+hard dependency, so if that interop ever changes, a token-authenticated
+request falls back to the global values rather than erroring: one more
+reason to assert on `data.attributes.consumer`.
+
+**Q: How do translations interact with overrides?**
+
+**A:** Exposed values follow interface language negotiation: a request on a
+language prefix reads that language's config translations. Per-consumer
+overrides do not: an override replaces its setting in every language. A
+setting can be translated, or overridden per consumer, not both at once.
 
 **Q: Can a frontend write settings back?**
 
 **A:** No. The exposed surface is read-only.
+
+**Q: Why is the output wider than I expected?**
+
+**A:** Every key the schema declares for an exposed object is included
+unless it is excluded, and the active theme carries more settings than the
+obvious branding ones. Review the live preview on the settings form and
+extend the exclusion list to taste.
 
 **Q: Why is a setting missing from the output?**
 

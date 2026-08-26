@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0-beta2 (unreleased)
+
+### Security
+- The internal page cache could serve one consumer's settings to every other
+  consumer. The request policy compared the raw request path to the endpoint,
+  and the router accepts spellings that comparison never saw: a language
+  prefix, a trailing slash, upper case, percent-encoding. Each one let a
+  header-identified response into a cache that looks responses up by URL
+  alone. The policy now denies on the header alone, see Changed. Covered by
+  unit and functional tests over every spelling.
+- `system.site:mail_notification` was exposed by default, next to the
+  `system.site:mail` it already excluded. It is excluded now, and an update
+  hook appends it for existing installs that have not edited the list.
+
+### Changed
+- A request that carries `X-Consumer-ID` no longer uses the internal page
+  cache on any path, not only the settings endpoint. Request policies run
+  before routing, so a path cannot be named safely there. The dynamic page
+  cache still serves such requests, varied on the header. Sites that relied
+  on the internal page cache for other pages fetched with that header will
+  see those pages come from the dynamic page cache instead.
+- The consumer overrides form keeps an override whose setting is no longer
+  exposed, instead of deleting it on the next save. Such overrides are named
+  in a warning on the form. A theme switch renames every theme setting key,
+  which used to lose every consumer's theme overrides silently.
+
+### Added
+- A functional test that pins the Simple OAuth interop: a client credentials
+  token alone identifies the consumer, no header or query parameter needed.
+  `drupal/simple_oauth` is a development dependency for it.
+- A kernel test that pins the language behaviour: exposed values follow
+  interface language negotiation, and a consumer override applies in every
+  language.
+- README notes for integrators: assert on `data.attributes.consumer` in the
+  build pipeline, how translations and overrides interact, and why the
+  default payload is wider than the branding keys.
+
+### Known limitations
+- A consumer override applies in every language. A setting can be
+  translated, or overridden per consumer, not both at once. Per-language
+  overrides are planned for 1.1.0.
+- Per-consumer include and exclude lists are designed and not built.
+
+### Errata for 1.0.0-beta1
+- The beta1 notes said Drupal 10 was unverified. The release CI ran the full
+  suite green on Drupal 10 and 11, so it was verified at the tag.
+- The beta1 notes said language negotiation was not handled. Exposed values
+  did follow it. What is missing is per-language overrides, above.
+
 ## 1.0.0-beta1 (2026-08-25)
 
 ### Added

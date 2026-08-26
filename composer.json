@@ -14,5 +14,11 @@
         "php": ">=8.3",
         "drupal/consumers": "^1.0",
         "drupal/jsonapi_resources": "^1.0"
+    },
+    "require-dev": {
+        "drupal/simple_oauth": "^6"
+    },
+    "suggest": {
+        "drupal/simple_oauth": "Identifies a frontend by its OAuth2 token, no header or query parameter needed."
     }
 }
