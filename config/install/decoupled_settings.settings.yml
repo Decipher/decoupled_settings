@@ -8,3 +8,4 @@ expose_theme_settings: true
 # Schema bounds the shape of an object, not the sensitivity of its values.
 excluded_keys:
   - 'system.site:mail'
+  - 'system.site:mail_notification'

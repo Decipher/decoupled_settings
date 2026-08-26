@@ -78,7 +78,8 @@ site value when it changes.
   separate action, and restores inheritance.
 - Only listed config objects are exposed, and within them only the keys
   their schema declares. Internal keys are always dropped, and an exclusion
-  list removes the rest. The site email address is excluded by default.
+  list removes the rest. The site email address and the notification
+  address are excluded by default.
 - Logo and favicon come from core's theme settings resolution, as usable
   URLs with core's fallbacks.
 - Responses carry the config cache tags of every object read, and a cache

@@ -56,6 +56,7 @@ class SettingsResolverTest extends KernelTestBase {
     $this->config('system.site')
       ->set('name', 'Global Site')
       ->set('slogan', 'Global slogan')
+      ->set('mail_notification', 'webmaster@example.com')
       ->save();
 
     // Theme settings are off by default here, so each test opts in.
@@ -141,6 +142,31 @@ class SettingsResolverTest extends KernelTestBase {
     $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
 
     $this->assertArrayNotHasKey('mail', $resolved['system.site']);
+    $this->assertArrayNotHasKey('mail_notification', $resolved['system.site']);
+  }
+
+  /**
+   * The update hook appends the notification address exclusion once.
+   */
+  public function testUpdateHookExcludesMailNotification(): void {
+    \Drupal::moduleHandler()->loadInclude('decoupled_settings', 'install');
+
+    // An install from before the exclusion shipped.
+    $this->config('decoupled_settings.settings')
+      ->set('excluded_keys', ['system.site:mail'])
+      ->save();
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+    $this->assertArrayHasKey('mail_notification', $resolved['system.site']);
+
+    decoupled_settings_update_10001();
+
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+    $this->assertArrayNotHasKey('mail_notification', $resolved['system.site']);
+
+    // Running again does not duplicate the entry.
+    decoupled_settings_update_10001();
+    $excluded = $this->config('decoupled_settings.settings')->get('excluded_keys');
+    $this->assertCount(1, array_keys($excluded, 'system.site:mail_notification', TRUE));
   }
 
   /**
