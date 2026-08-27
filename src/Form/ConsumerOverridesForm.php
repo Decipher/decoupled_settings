@@ -297,6 +297,10 @@ final class ConsumerOverridesForm extends FormBase {
       '#title_display' => 'invisible',
       '#disabled' => !$editable,
     ];
+    // An editable field starts empty on purpose: empty means inherited, and
+    // the inherited column already shows what that is. A field nobody can
+    // type into has no such affordance, so it shows the value it holds.
+    $effective = $override ?? $global;
 
     if (is_bool($global)) {
       return $widget + [
@@ -308,14 +312,16 @@ final class ConsumerOverridesForm extends FormBase {
       return $widget + [
         '#type' => 'number',
         '#step' => is_int($global) ? 1 : 'any',
-        '#default_value' => $override ?? '',
+        '#default_value' => ($editable ? $override : $effective) ?? '',
       ];
     }
+
+    $shown = $editable ? $override : $effective;
 
     return $widget + [
       '#type' => 'textfield',
       '#maxlength' => 512,
-      '#default_value' => $override !== NULL ? $this->formatValue($override) : '',
+      '#default_value' => $shown !== NULL ? $this->formatValue($shown) : '',
       '#description' => NULL,
     ];
   }

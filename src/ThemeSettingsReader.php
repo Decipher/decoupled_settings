@@ -51,8 +51,11 @@ final readonly class ThemeSettingsReader {
    *
    * Core resolves logo.url and favicon.url from these keys in read(), and
    * the resolver applies a consumer's overrides afterwards. An override of
-   * one of these therefore arrives too late to change the URL a client
-   * reads, so the forms mark them rather than inviting the edit.
+   * one of these arrives too late to change the URL a client reads, so the
+   * forms mark them rather than inviting the edit.
+   *
+   * Only the sources belong here. Overriding favicon.mimetype, for one,
+   * reaches the response and is read, because nothing is computed from it.
    */
   public function derivedSourceKeys(): array {
     return [
@@ -60,7 +63,6 @@ final readonly class ThemeSettingsReader {
       'logo.use_default',
       'favicon.path',
       'favicon.use_default',
-      'favicon.mimetype',
     ];
   }
 

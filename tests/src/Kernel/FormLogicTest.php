@@ -230,6 +230,12 @@ class FormLogicTest extends KernelTestBase {
     $row = $form['settings']['stark.settings:logo.path'];
     $this->assertTrue($row['enabled']['#disabled']);
     $this->assertStringContainsString('Derived', (string) $row['enabled']['#description']);
+    // A field nobody can type into shows the value it holds, rather than the
+    // empty box that means "inherited" on an editable row.
+    $this->assertSame(
+      $form['settings']['stark.settings:logo.path']['inherited']['#markup'],
+      (string) $row['value']['#default_value']
+    );
 
     // The URL is the one to override, so it stays editable.
     $this->assertArrayHasKey('stark.settings:logo.url', $form['settings']);
@@ -253,12 +259,13 @@ class FormLogicTest extends KernelTestBase {
 
     $rows = array_filter(
       $form['settings'],
-      static fn ($row, $key) => is_array($row) && !str_starts_with((string) $key, '#') && ($row['enabled']['#disabled'] ?? FALSE),
+      static fn ($row, $key): bool => is_array($row) && !str_starts_with((string) $key, '#') && ($row['enabled']['#disabled'] ?? FALSE),
       ARRAY_FILTER_USE_BOTH
     );
     $this->assertNotEmpty($rows, 'A non-scalar setting is present to disable.');
-    foreach ($rows as $row) {
-      $this->assertNotNull($row['enabled']['#description']);
+    foreach ($rows as $key => $row) {
+      $this->assertNotNull($row['enabled']['#description'], "$key explains itself");
+      $this->assertNotSame('', (string) ($row['value']['#default_value'] ?? ''), "$key shows its value");
     }
   }
 
