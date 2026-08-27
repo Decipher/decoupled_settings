@@ -208,6 +208,61 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * A key the resolved URL is derived from cannot be overridden.
+   *
+   * Core resolves logo.url before a consumer's overrides are merged, so an
+   * override of logo.path would take and change nothing a client reads.
+   */
+  public function testDerivedThemeKeysAreNotOverridable(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $this->assertArrayHasKey('stark.settings:logo.path', $form['settings']);
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertTrue($row['enabled']['#disabled']);
+    $this->assertStringContainsString('Derived', (string) $row['enabled']['#description']);
+
+    // The URL is the one to override, so it stays editable.
+    $this->assertArrayHasKey('stark.settings:logo.url', $form['settings']);
+    $this->assertFalse((bool) ($form['settings']['stark.settings:logo.url']['enabled']['#disabled'] ?? FALSE));
+    $this->assertNull($form['settings']['stark.settings:logo.url']['enabled']['#description']);
+  }
+
+  /**
+   * A row that cannot take a single-field value says so on the checkbox.
+   */
+  public function testDisabledRowExplainsItself(): void {
+    // The test module contributes a sequence, which has no single-field
+    // widget and so is the case this description exists for.
+    $this->enableModules(['decoupled_settings_test']);
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $rows = array_filter(
+      $form['settings'],
+      static fn ($row, $key) => is_array($row) && !str_starts_with((string) $key, '#') && ($row['enabled']['#disabled'] ?? FALSE),
+      ARRAY_FILTER_USE_BOTH
+    );
+    $this->assertNotEmpty($rows, 'A non-scalar setting is present to disable.');
+    foreach ($rows as $row) {
+      $this->assertNotNull($row['enabled']['#description']);
+    }
+  }
+
+  /**
    * An override for a setting that is not exposed survives a save.
    *
    * The exposure list can shrink, and a theme switch renames every

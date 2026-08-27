@@ -8,8 +8,10 @@ use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\decoupled_settings\SettingsMerger;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeSettingsReader;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -32,6 +34,11 @@ final class ConsumerOverridesForm extends FormBase {
   protected SettingsMerger $merger;
 
   /**
+   * The theme settings reader, which knows what it derives.
+   */
+  protected ThemeSettingsReader $themeSettingsReader;
+
+  /**
    * The consumer being edited.
    */
   protected ?ConsumerInterface $consumer = NULL;
@@ -43,6 +50,7 @@ final class ConsumerOverridesForm extends FormBase {
     $instance = new self();
     $instance->resolver = $container->get('decoupled_settings.resolver');
     $instance->merger = $container->get('decoupled_settings.merger');
+    $instance->themeSettingsReader = $container->get('decoupled_settings.theme_settings_reader');
     $instance->setStringTranslation($container->get('string_translation'));
     $instance->setMessenger($container->get('messenger'));
     return $instance;
@@ -106,6 +114,13 @@ final class ConsumerOverridesForm extends FormBase {
         // A non-scalar value has no sensible single-field widget, so it is
         // shown but not editable here rather than mangled into a string.
         $editable = $global === NULL || is_scalar($global);
+        // A key the resolved URL was derived from cannot be overridden at
+        // all: core resolves the URL before a consumer's overrides are
+        // merged, so the edit would take and change nothing a client reads.
+        $derived = $this->isDerivedKey($name, $path);
+        if ($derived) {
+          $editable = FALSE;
+        }
         $row = ['#tree' => TRUE];
 
         $row['label'] = ['#markup' => $key];
@@ -116,6 +131,7 @@ final class ConsumerOverridesForm extends FormBase {
           '#title' => $this->t('Override @key', ['@key' => $key]),
           '#title_display' => 'invisible',
           '#disabled' => !$editable,
+          '#description' => $this->rowNote($editable, $derived),
         ];
         $row['value'] = $this->valueWidget($key, $global, $overridden ? $overrides[$key] : NULL, $editable);
 
@@ -254,6 +270,27 @@ final class ConsumerOverridesForm extends FormBase {
    * first place. The stored value keeps the global value's type, so an
    * integer setting is stored and served as an integer, never as a string.
    */
+  protected function isDerivedKey(string $name, string $path): bool {
+    return $this->themeSettingsReader->isThemeSettings($name)
+      && in_array($path, $this->themeSettingsReader->derivedSourceKeys(), TRUE);
+  }
+
+  /**
+   * Says why a row cannot be overridden, or nothing when it can.
+   */
+  protected function rowNote(bool $editable, bool $derived): ?TranslatableMarkup {
+    if ($editable) {
+      return NULL;
+    }
+
+    return $derived
+      ? $this->t('Derived: override the resolved URL instead.')
+      : $this->t('Not editable here: this value is not a single field.');
+  }
+
+  /**
+   * Renders the value widget for one setting.
+   */
   protected function valueWidget(string $key, mixed $global, mixed $override, bool $editable): array {
     $widget = [
       '#title' => $this->t('Value for @key', ['@key' => $key]),
@@ -279,7 +316,7 @@ final class ConsumerOverridesForm extends FormBase {
       '#type' => 'textfield',
       '#maxlength' => 512,
       '#default_value' => $override !== NULL ? $this->formatValue($override) : '',
-      '#description' => $editable ? NULL : $this->t('Not editable here.'),
+      '#description' => NULL,
     ];
   }
 
