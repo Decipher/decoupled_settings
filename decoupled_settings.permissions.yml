@@ -1,6 +1,12 @@
 'read decoupled settings':
   title: 'Read decoupled settings'
-  description: 'Read the exposed site and theme settings over the API.'
+  description: 'Read the exposed site and theme settings over the API. Everything on the exposure list becomes readable by whoever holds this, including through a frontend that publishes it.'
+  restrict access: true
+
+'read any consumer decoupled settings':
+  title: "Read any consumer's decoupled settings"
+  description: 'Name any consumer when reading, rather than only a consumer this account may view. Without this, an account reads the settings of the consumer it belongs to, and of consumers the Consumers module says it may view.'
+  restrict access: true
 
 'administer decoupled settings':
   title: 'Administer decoupled settings'

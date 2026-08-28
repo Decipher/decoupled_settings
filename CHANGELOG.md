@@ -19,6 +19,13 @@ and this project adheres to
   consumer's `user_id`. A refused consumer reads as an unknown one, the
   global values with a null consumer, rather than a 403 that would confirm
   which client IDs exist.
+- **Read any consumer's decoupled settings** is a new permission, for a
+  reporting tool or a support screen that reads across consumers without
+  holding consumer entity permissions. It adds a grant rather than
+  replacing the access check.
+- **Read decoupled settings** now carries the restricted-access warning on
+  the permissions page. Everything on the exposure list becomes readable by
+  whoever holds it, including through a frontend that publishes it.
 
 ## 1.0.0-beta2 (2026-08-26)
 

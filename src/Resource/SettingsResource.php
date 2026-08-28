@@ -133,24 +133,18 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
   /**
    * Tests whether the caller may read the settings of one consumer.
    *
-   * Consumers already defines who may view a consumer, so this defers to it
-   * rather than adding a permission of its own. Two cases come first,
-   * because that access check alone would refuse them:
+   * Allowed, in order:
+   * - an anonymous caller, because the site already chose to expose
+   *   settings to anonymous when it granted the read permission;
+   * - a holder of "read any consumer's decoupled settings";
+   * - the consumer's own app, which Simple OAuth authenticates as the
+   *   account in the consumer's user_id field;
+   * - anyone Consumers' own "view" access allows.
    *
-   * An anonymous caller keeps naming any consumer. There is no ownership to
-   * check for them, and "read decoupled settings" is the boundary the site
-   * chose when it granted anonymous access.
-   *
-   * A consumer's own account reads it. Simple OAuth authenticates a
-   * client_credentials token as the account named in the consumer's
-   * user_id field, so an app reads itself without needing "view own
-   * consumer entities" granted to whatever role that account holds. Note
-   * that this is not the entity's owner: owner_id records who created the
-   * consumer, and Consumers answers that question separately.
-   *
-   * What is left is the case worth closing: an authenticated caller naming
-   * a consumer that is not theirs, which was every app holding the scope
-   * reading every other app's overrides.
+   * Everyone else is refused, and a refused consumer reads as one that
+   * does not exist. The permission adds a grant rather than replacing the
+   * entity access check, so Consumers stays the answer to "who may view a
+   * consumer" and there is no second source of truth.
    */
   private function mayRead(ConsumerInterface $consumer, CacheableMetadata $cacheability): bool {
     // The answer depends on who is asking, however they authenticated.
@@ -160,11 +154,15 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       return TRUE;
     }
 
+    $cacheability->addCacheContexts(['user.permissions']);
+    if ($this->currentUser->hasPermission('read any consumer decoupled settings')) {
+      return TRUE;
+    }
+
     $cacheability->addCacheableDependency($consumer);
-    // Simple OAuth authenticates a client_credentials token as the account
-    // in the consumer's user_id field, which Simple OAuth adds. That is a
-    // different question from who owns the consumer entity, which is what
-    // Consumers checks below, so both are asked.
+    // user_id is the account a token acts as, which Simple OAuth adds, and
+    // owner_id is who created the consumer, which Consumers checks below.
+    // They are different fields, so both are asked.
     if ($consumer->hasField('user_id')) {
       $acts_as = (int) ($consumer->get('user_id')->target_id ?? 0);
       if ($acts_as !== 0 && $acts_as === (int) $this->currentUser->id()) {
