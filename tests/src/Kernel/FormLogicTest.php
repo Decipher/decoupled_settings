@@ -148,12 +148,14 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
-   * A setting with no value is listed with an empty inherited cell.
+   * A setting with no value says so, rather than showing nothing.
    *
    * The notification address is NULL on a fresh site. It is excluded by
-   * default, so this exposes it on purpose to render the NULL path.
+   * default, so this exposes it on purpose to render the NULL path. A
+   * blank cell would read the same as an empty string, which is a
+   * different thing to send a consumer.
    */
-  public function testOverrideFormListsNullValueAsEmpty(): void {
+  public function testOverrideFormNamesAMissingValue(): void {
     $this->config('decoupled_settings.settings')
       ->set('excluded_keys', [])
       ->save();
@@ -165,7 +167,7 @@ class FormLogicTest extends KernelTestBase {
       ->buildForm(ConsumerOverridesForm::class, $form_state);
 
     $this->assertArrayHasKey('system.site:mail_notification', $form['settings']);
-    $this->assertSame('', $form['settings']['system.site:mail_notification']['inherited']['#markup']);
+    $this->assertSame('null', $form['settings']['system.site:mail_notification']['inherited']['#markup']);
   }
 
   /**
@@ -241,6 +243,37 @@ class FormLogicTest extends KernelTestBase {
     $this->assertArrayHasKey('stark.settings:logo.url', $form['settings']);
     $this->assertFalse((bool) ($form['settings']['stark.settings:logo.url']['enabled']['#disabled'] ?? FALSE));
     $this->assertNull($form['settings']['stark.settings:logo.url']['enabled']['#description']);
+  }
+
+  /**
+   * A locked row says what the consumer receives, empty or missing.
+   *
+   * A blank box on a row nobody can edit is ambiguous: the value could be
+   * an empty string, or the form could be declining to show it. The
+   * consumer receives one of them, so the form names which.
+   */
+  public function testLockedRowDescribesAnEmptyValue(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    // The theme uses its default logo, so the stored path is an empty
+    // string and that is exactly what the consumer is sent.
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertSame('""', (string) $row['value']['#default_value']);
+    $this->assertSame('""', (string) $row['inherited']['#markup']);
+
+    // An editable row keeps the empty box, where empty means inherited.
+    $editable = $form['settings']['system.site:slogan'];
+    $this->assertSame('', (string) $editable['value']['#default_value']);
   }
 
   /**

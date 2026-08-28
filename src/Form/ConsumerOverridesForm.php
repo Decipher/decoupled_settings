@@ -124,7 +124,7 @@ final class ConsumerOverridesForm extends FormBase {
         $row = ['#tree' => TRUE];
 
         $row['label'] = ['#markup' => $key];
-        $row['inherited'] = ['#markup' => $this->formatValue($global)];
+        $row['inherited'] = ['#markup' => $this->describeValue($global)];
         $row['enabled'] = [
           '#type' => 'checkbox',
           '#default_value' => $overridden,
@@ -324,14 +324,42 @@ final class ConsumerOverridesForm extends FormBase {
       ];
     }
 
-    $shown = $editable ? $override : $effective;
+    // A locked field describes its value, an editable one holds it: typing
+    // over a description would store the description.
+    if (!$editable) {
+      return $widget + [
+        '#type' => 'textfield',
+        '#maxlength' => 512,
+        '#default_value' => $this->describeValue($effective),
+        '#description' => NULL,
+      ];
+    }
 
     return $widget + [
       '#type' => 'textfield',
       '#maxlength' => 512,
-      '#default_value' => $shown !== NULL ? $this->formatValue($shown) : '',
+      '#default_value' => $override !== NULL ? $this->formatValue($override) : '',
       '#description' => NULL,
     ];
+  }
+
+  /**
+   * Describes a value for a reader rather than for an input.
+   *
+   * An empty string and a missing value both render as nothing, so a row
+   * nobody can edit leaves the reader unable to tell an empty value from a
+   * value the form declined to show. The consumer receives one of them, and
+   * on a locked row the form is the only place to find out which.
+   */
+  protected function describeValue(mixed $value): string {
+    if ($value === NULL) {
+      return 'null';
+    }
+    if ($value === '') {
+      return '""';
+    }
+
+    return $this->formatValue($value);
   }
 
   /**
