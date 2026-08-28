@@ -68,6 +68,15 @@ Per-consumer overrides are edited on the consumer itself, at
 setting to override it. Anything left unticked is inherited, and follows the
 site value when it changes.
 
+That Settings tab is a local task, which sites using the Navigation top bar
+render somewhere a reader does not look. The **Settings** operation in the
+consumer list reaches the same page, and so does a link on the consumer edit
+form.
+
+Both pages carry a filter box above the table, which matters once theme
+settings are exposed: a theme contributes far more rows than `system.site`
+does.
+
 ## Features
 
 - Global values are read from the config objects that already hold them.
@@ -145,9 +154,32 @@ a consumer receives, which is the exposure list's job.
 **Q: Why is the output wider than I expected?**
 
 **A:** Every key the schema declares for an exposed object is included
-unless it is excluded, and the active theme carries more settings than the
+unless it is excluded, and the active theme holds more settings than the
 obvious branding ones. Review the live preview on the settings form and
 extend the exclusion list to taste.
+
+**Q: I ticked a consumer as default. Why does nothing use it?**
+
+**A:** Consumers' `is_default` flag is deliberately ignored. A request that
+does not name a consumer reads the global values, never the overrides of one
+consumer. The alternative, following the Consumers negotiator,
+would serve the default consumer's overrides to a caller that named nobody,
+which is a leak by another name.
+
+**Q: Why can I not expose a config entity, such as a date format?**
+
+**A:** The exposure form lists simple config only. Config entities are
+already served by core's JSON:API, at their own endpoints and with their own
+access rules, so this module would be a second, weaker route to the same
+data. Setting one in `exposed_objects` by hand resolves, which makes the
+form look broken. It is not: the form is the supported surface.
+
+**Q: Why does `system.maintenance:message` contain `@site`?**
+
+**A:** Core substitutes that placeholder when it renders the message, and
+this endpoint serves stored config rather than rendered output. A client
+rendering the string verbatim shows the placeholder. `system.site:name`
+travels in the same response, so a client can substitute it.
 
 **Q: Why is a setting missing from the output?**
 
@@ -157,7 +189,7 @@ Undeclared keys are dropped rather than guessed at.
 
 **Q: Can a module expose settings that are not config?**
 
-**A:** Yes. Implement `hook_decoupled_settings_global_alter()` to contribute a
+**A:** Yes. Use `hook_decoupled_settings_global_alter()` to contribute a
 group of computed values. A contributed setting is overridable per consumer,
 exactly like one read from config. See `decoupled_settings.api.php`.
 
