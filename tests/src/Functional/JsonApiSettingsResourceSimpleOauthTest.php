@@ -139,4 +139,45 @@ class JsonApiSettingsResourceSimpleOauthTest extends BrowserTestBase {
     $this->assertSame('Partner Portal', $document['data']['attributes']['settings']['system.site']['name']);
   }
 
+  /**
+   * A token reads its own consumer, and reads no other.
+   *
+   * The token authenticates as the account in the consumer's user_id
+   * field, so an app reads itself with no consumer permission granted.
+   * Naming somebody else's consumer reads as an unknown one: the global
+   * values, rather than a 403 that would confirm the client ID exists.
+   */
+  public function testTokenReadsItsOwnConsumerAndNoOther(): void {
+    Consumer::create([
+      'client_id' => 'other_app',
+      'label' => 'Other app',
+      SettingsResolver::OVERRIDE_FIELD => ['system.site:name' => 'Other Portal'],
+    ])->save();
+
+    $client = $this->container->get('http_client_factory')
+      ->fromOptions(['base_uri' => $this->baseUrl, 'http_errors' => FALSE]);
+    $response = $client->post(Url::fromRoute('oauth2_token.token')->toString(), [
+      'form_params' => [
+        'grant_type' => 'client_credentials',
+        'client_id' => 'partner_frontend',
+        'client_secret' => $this->clientSecret,
+        'scope' => 'frontend_app',
+      ],
+    ]);
+    $token = Json::decode((string) $response->getBody())['access_token'] ?? '';
+    $this->assertNotEmpty($token);
+
+    $own = $this->fetch(['Authorization' => 'Bearer ' . $token]);
+    $this->assertSame('partner_frontend', $own['data']['attributes']['consumer']);
+
+    // The same token, naming another consumer explicitly.
+    $this->getSession()->restart();
+    $content = $this->drupalGet('/jsonapi/decoupled/settings', ['query' => ['consumerId' => 'other_app']], [
+      'Authorization' => 'Bearer ' . $token,
+    ]);
+    $other = Json::decode($content) ?? [];
+    $this->assertNotSame('other_app', $other['data']['attributes']['consumer'] ?? NULL);
+    $this->assertNotSame('Other Portal', $other['data']['attributes']['settings']['system.site']['name'] ?? NULL);
+  }
+
 }

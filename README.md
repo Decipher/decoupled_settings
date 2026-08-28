@@ -90,8 +90,8 @@ site value when it changes.
 **Q: How does a consumer identify itself?**
 
 **A:** With the `X-Consumer-ID` request header, or the `consumerId` query
-parameter. A request that names no consumer, or one that does not exist,
-reads the global values.
+parameter. A request that does not name a consumer, or names one that does
+not exist or that the caller may not read, gets the global values.
 
 That fallback is deliberate, and it means a typo in a build variable ships
 the global branding with a green build. Assert on `data.attributes.consumer`
@@ -114,6 +114,25 @@ reason to assert on `data.attributes.consumer`.
 language prefix reads that language's config translations. Per-consumer
 overrides do not: an override replaces its setting in every language. A
 setting can be translated, or overridden per consumer, not both at once.
+
+**Q: Who may read another consumer's settings?**
+
+**A:** Naming a consumer needs access to it, and Consumers already decides
+that. Anonymous callers and an app reading itself come first, because that
+check alone would refuse them:
+
+| Caller | May name |
+|---|---|
+| Anonymous | any consumer. There is no ownership to check, and the read permission is the boundary the site chose when it granted anonymous access. |
+| The account a token acts as | its own consumer. Simple OAuth authenticates a client_credentials token as the account in the consumer's `user_id`, so an app reads itself with no consumer permission. |
+| Anyone else | a consumer they can `view`, which Consumers grants through **Administer consumer entities**, or ownership plus **View own consumer entities**. |
+
+A consumer the caller may not read behaves like one that does not exist: the
+global values, with `"consumer": null`. Not a 403, which would confirm to a
+caller which client IDs are real.
+
+That closes one app reading another app's overrides. It does not narrow what
+a consumer receives, which is the exposure list's job.
 
 **Q: Can a frontend write settings back?**
 
