@@ -244,6 +244,46 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * A locked row ignores a submitted value, whatever it says.
+   *
+   * A browser never sends a disabled input, and core assigns the element
+   * its default instead, which AdminUiTest pins over HTTP. This covers the
+   * case core does not: values that name the locked row anyway, whether
+   * from a rebuild, a forged post or a future change to that handling.
+   */
+  public function testStoredOverrideOnLockedKeySurvivesSave(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'stark.settings:logo.path' => 'themes/custom/brand/logo.svg',
+        'system.site:name' => 'Consumer Site',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'system.site:name' => ['enabled' => 1, 'value' => 'Renamed'],
+        // Whatever Form API does with a disabled checkbox, the stored value
+        // is the one that must come back.
+        'stark.settings:logo.path' => ['enabled' => 0, 'value' => ''],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $stored = $this->reloadOverrides($consumer_id);
+    $this->assertSame('themes/custom/brand/logo.svg', $stored['stark.settings:logo.path'] ?? NULL);
+    $this->assertSame('Renamed', $stored['system.site:name'] ?? NULL);
+  }
+
+  /**
    * A row that cannot take a single-field value says so on the checkbox.
    */
   public function testDisabledRowExplainsItself(): void {

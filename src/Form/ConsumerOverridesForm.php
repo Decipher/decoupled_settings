@@ -197,6 +197,14 @@ final class ConsumerOverridesForm extends FormBase {
     $overrides = $this->currentOverrides();
 
     foreach ($rows as $key => $row) {
+      // A locked row carries no decision: its checkbox was disabled, so
+      // whatever is stored stays exactly as the form displayed it. Core
+      // already ignores input for a disabled element and substitutes its
+      // default, so this is belt and braces, and it says in code what the
+      // save depends on rather than leaving it to core's semantics.
+      if (!empty($form['settings'][$key]['enabled']['#disabled'])) {
+        continue;
+      }
       if (empty($row['enabled'])) {
         // Unticked means inherited. The key is removed rather than stored
         // as an empty value, which would mean "deliberately blank".
@@ -263,12 +271,7 @@ final class ConsumerOverridesForm extends FormBase {
   }
 
   /**
-   * Builds the widget that matches the type of the setting.
-   *
-   * The widget is the typing: a boolean setting is a checkbox, a number is a
-   * number field, so a value of the wrong type cannot be entered in the
-   * first place. The stored value keeps the global value's type, so an
-   * integer setting is stored and served as an integer, never as a string.
+   * Tests whether a key is one the resolved URLs are derived from.
    */
   protected function isDerivedKey(string $name, string $path): bool {
     return $this->themeSettingsReader->isThemeSettings($name)
@@ -289,7 +292,12 @@ final class ConsumerOverridesForm extends FormBase {
   }
 
   /**
-   * Renders the value widget for one setting.
+   * Builds the widget that matches the type of the setting.
+   *
+   * The widget is the typing: a boolean setting is a checkbox, a number is a
+   * number field, so a value of the wrong type cannot be entered in the
+   * first place. The stored value keeps the global value's type, so an
+   * integer setting is stored and served as an integer, never as a string.
    */
   protected function valueWidget(string $key, mixed $global, mixed $override, bool $editable): array {
     $widget = [
