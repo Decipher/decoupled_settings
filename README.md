@@ -68,15 +68,6 @@ Per-consumer overrides are edited on the consumer itself, at
 setting to override it. Anything left unticked is inherited, and follows the
 site value when it changes.
 
-That Settings tab is a local task, which sites using the Navigation top bar
-render somewhere a reader does not look. The **Settings** operation in the
-consumer list reaches the same page, and so does a link on the consumer edit
-form.
-
-Both pages carry a filter box above the table, which matters once theme
-settings are exposed: a theme contributes far more rows than `system.site`
-does.
-
 ## Features
 
 - Global values are read from the config objects that already hold them.
@@ -157,14 +148,6 @@ a consumer receives, which is the exposure list's job.
 unless it is excluded, and the active theme holds more settings than the
 obvious branding ones. Review the live preview on the settings form and
 extend the exclusion list to taste.
-
-**Q: I ticked a consumer as default. Why does nothing use it?**
-
-**A:** Consumers' `is_default` flag is deliberately ignored. A request that
-does not name a consumer reads the global values, never the overrides of one
-consumer. The alternative, following the Consumers negotiator,
-would serve the default consumer's overrides to a caller that named nobody,
-which is a leak by another name.
 
 **Q: Why can I not expose a config entity, such as a date format?**
 
