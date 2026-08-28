@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Security
+- Naming a consumer now requires access to that consumer. Anyone holding
+  **Read decoupled settings** could read any consumer's overrides by naming
+  it in the header or the query, which under the recommended posture for
+  protected values meant every app holding the scope reading every other
+  app's. Consumers decides who may view a consumer, so no permission of this
+  module's own was added. Anonymous callers are unchanged, and an app still
+  reads itself: Simple OAuth authenticates a token as the account in the
+  consumer's `user_id`. A refused consumer reads as an unknown one, the
+  global values with a null consumer, rather than a 403 that would confirm
+  which client IDs exist.
+
 ## 1.0.0-beta2 (2026-08-26)
 
 ### Security

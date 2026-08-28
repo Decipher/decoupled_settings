@@ -140,14 +140,15 @@ class JsonApiSettingsResourceSimpleOauthTest extends BrowserTestBase {
   }
 
   /**
-   * A token reads its own consumer, and reads no other.
+   * A token reads its own consumer, whatever the request asks for.
    *
-   * The token authenticates as the account in the consumer's user_id
-   * field, so an app reads itself with no consumer permission granted.
-   * Naming somebody else's consumer reads as an unknown one: the global
-   * values, rather than a 403 that would confirm the client ID exists.
+   * Simple OAuth overwrites X-Consumer-ID from the token, and the header
+   * beats the query parameter, so a token holder naming another consumer
+   * reads its own rather than being refused. The access check never has to
+   * answer for this path, which is why the session-authenticated cases in
+   * JsonApiSettingsResourceTest carry the refusal contract.
    */
-  public function testTokenReadsItsOwnConsumerAndNoOther(): void {
+  public function testTokenReadsItsOwnConsumerWhateverIsNamed(): void {
     Consumer::create([
       'client_id' => 'other_app',
       'label' => 'Other app',
@@ -170,14 +171,19 @@ class JsonApiSettingsResourceSimpleOauthTest extends BrowserTestBase {
     $own = $this->fetch(['Authorization' => 'Bearer ' . $token]);
     $this->assertSame('partner_frontend', $own['data']['attributes']['consumer']);
 
-    // The same token, naming another consumer explicitly.
+    // The same token, naming another consumer explicitly. The token wins.
     $this->getSession()->restart();
     $content = $this->drupalGet('/jsonapi/decoupled/settings', ['query' => ['consumerId' => 'other_app']], [
       'Authorization' => 'Bearer ' . $token,
     ]);
     $other = Json::decode($content) ?? [];
-    $this->assertNotSame('other_app', $other['data']['attributes']['consumer'] ?? NULL);
-    $this->assertNotSame('Other Portal', $other['data']['attributes']['settings']['system.site']['name'] ?? NULL);
+    // Assert the shape, not the absence of a value: an error document, or a
+    // body that does not decode, would satisfy a negative assertion while
+    // the branch this test exists for was broken.
+    $this->assertSession()->statusCodeEquals(200);
+    $this->assertArrayHasKey('data', $other, 'The response is a settings document, not an error.');
+    $this->assertSame('partner_frontend', $other['data']['attributes']['consumer']);
+    $this->assertSame('Partner Portal', $other['data']['attributes']['settings']['system.site']['name']);
   }
 
 }
