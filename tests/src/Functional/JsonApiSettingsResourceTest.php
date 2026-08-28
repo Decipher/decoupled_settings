@@ -244,6 +244,26 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * The permission names any consumer, without Consumers' permissions.
+   *
+   * An administrator gets one switch to reason about, rather than having
+   * to hand out consumer entity permissions to a reporting tool.
+   */
+  public function testReadAnyConsumerPermissionAllowsNaming(): void {
+    $this->grantAnonymousRead();
+    $account = $this->drupalCreateUser([
+      'read decoupled settings',
+      'read any consumer decoupled settings',
+    ]);
+    $this->drupalLogin($account);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
    * Consumers' own view access is what opens the door for everyone else.
    */
   public function testConsumerViewAccessAllowsNamingAnother(): void {

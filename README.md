@@ -124,12 +124,16 @@ check alone would refuse them:
 | Caller | May name |
 |---|---|
 | Anonymous | any consumer. There is no ownership to check, and the read permission is the boundary the site chose when it granted anonymous access. |
+| A holder of **Read any consumer's decoupled settings** | any consumer. One switch for a reporting tool or a support screen, without handing out consumer entity permissions. |
 | The account a token acts as | its own consumer. Simple OAuth authenticates a client_credentials token as the account in the consumer's `user_id`, so an app reads itself with no consumer permission. |
 | Anyone else | a consumer they can `view`, which Consumers grants through **Administer consumer entities**, or ownership plus **View own consumer entities**. |
 
 A consumer the caller may not read behaves like one that does not exist: the
 global values, with `"consumer": null`. Not a 403, which would confirm to a
 caller which client IDs are real.
+
+The permission adds a grant rather than replacing the access check, so
+Consumers stays the answer to who may view a consumer.
 
 That closes one app reading another app's overrides. It does not narrow what
 a consumer receives, which is the exposure list's job.
