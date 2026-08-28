@@ -184,6 +184,22 @@ class JsonApiSettingsResourceSimpleOauthTest extends BrowserTestBase {
     $this->assertArrayHasKey('data', $other, 'The response is a settings document, not an error.');
     $this->assertSame('partner_frontend', $other['data']['attributes']['consumer']);
     $this->assertSame('Partner Portal', $other['data']['attributes']['settings']['system.site']['name']);
+
+    // And the header, which is the channel the resource reads first. Simple
+    // OAuth sets it from the token during authentication, so a value the
+    // client supplied is replaced rather than honoured. Pinned here because
+    // nothing else in this repository can settle that, and the docblock
+    // above depends on it.
+    $this->getSession()->restart();
+    $spoofed = Json::decode($this->drupalGet('/jsonapi/decoupled/settings', [], [
+      'Authorization' => 'Bearer ' . $token,
+      'X-Consumer-ID' => 'other_app',
+    ])) ?? [];
+
+    $this->assertSession()->statusCodeEquals(200);
+    $this->assertArrayHasKey('data', $spoofed, 'The response is a settings document, not an error.');
+    $this->assertSame('partner_frontend', $spoofed['data']['attributes']['consumer']);
+    $this->assertSame('Partner Portal', $spoofed['data']['attributes']['settings']['system.site']['name']);
   }
 
 }
