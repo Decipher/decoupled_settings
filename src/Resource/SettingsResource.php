@@ -9,6 +9,7 @@ use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Cache\CacheableResponseInterface;
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\decoupled_settings\SettingsResolver;
 use Drupal\jsonapi\JsonApiResource\LinkCollection;
 use Drupal\jsonapi\JsonApiResource\ResourceObject;
@@ -33,6 +34,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
   public function __construct(
     private readonly SettingsResolver $settingsResolver,
     private readonly EntityTypeManagerInterface $entityTypeManager,
+    private readonly AccountInterface $currentUser,
   ) {}
 
   /**
@@ -42,6 +44,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     return new self(
       $container->get('decoupled_settings.resolver'),
       $container->get('entity_type.manager'),
+      $container->get('current_user'),
     );
   }
 
@@ -67,7 +70,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       'headers:X-Consumer-ID',
     ]);
 
-    $consumer = $this->consumerFor($request);
+    $consumer = $this->consumerFor($request, $cacheability);
     $resolved = $this->settingsResolver->resolve($consumer, $cacheability);
 
     $resource_type = reset($resource_types);
@@ -107,7 +110,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
    * against the consumers module behaves the same: the X-Consumer-ID header
    * first, then the consumerId query parameter.
    */
-  private function consumerFor(Request $request): ?ConsumerInterface {
+  private function consumerFor(Request $request, CacheableMetadata $cacheability): ?ConsumerInterface {
     $client_id = $request->headers->get('X-Consumer-ID')
       ?: $request->query->get('consumerId');
     if (!$client_id) {
@@ -117,8 +120,62 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     $consumers = $this->entityTypeManager->getStorage('consumer')
       ->loadByProperties(['client_id' => $client_id]);
     $consumer = reset($consumers);
+    if (!$consumer instanceof ConsumerInterface) {
+      return NULL;
+    }
 
-    return $consumer instanceof ConsumerInterface ? $consumer : NULL;
+    // A consumer the caller may not read reads as one that does not exist:
+    // the global values, with no consumer named. A 403 would tell a caller
+    // which client IDs are real.
+    return $this->mayRead($consumer, $cacheability) ? $consumer : NULL;
+  }
+
+  /**
+   * Tests whether the caller may read the settings of one consumer.
+   *
+   * Consumers already defines who may view a consumer, so this defers to it
+   * rather than adding a permission of its own. Two cases come first,
+   * because that access check alone would refuse them:
+   *
+   * An anonymous caller keeps naming any consumer. There is no ownership to
+   * check for them, and "read decoupled settings" is the boundary the site
+   * chose when it granted anonymous access.
+   *
+   * A consumer's own account reads it. Simple OAuth authenticates a
+   * client_credentials token as the account named in the consumer's
+   * user_id field, so an app reads itself without needing "view own
+   * consumer entities" granted to whatever role that account holds. Note
+   * that this is not the entity's owner: owner_id records who created the
+   * consumer, and Consumers answers that question separately.
+   *
+   * What is left is the case worth closing: an authenticated caller naming
+   * a consumer that is not theirs, which was every app holding the scope
+   * reading every other app's overrides.
+   */
+  private function mayRead(ConsumerInterface $consumer, CacheableMetadata $cacheability): bool {
+    // The answer depends on who is asking, however they authenticated.
+    $cacheability->addCacheContexts(['user']);
+
+    if ($this->currentUser->isAnonymous()) {
+      return TRUE;
+    }
+
+    $cacheability->addCacheableDependency($consumer);
+    // Simple OAuth authenticates a client_credentials token as the account
+    // in the consumer's user_id field, which Simple OAuth adds. That is a
+    // different question from who owns the consumer entity, which is what
+    // Consumers checks below, so both are asked.
+    if ($consumer->hasField('user_id')) {
+      $acts_as = (int) ($consumer->get('user_id')->target_id ?? 0);
+      if ($acts_as !== 0 && $acts_as === (int) $this->currentUser->id()) {
+        return TRUE;
+      }
+    }
+
+    $access = $consumer->access('view', $this->currentUser, TRUE);
+    $cacheability->addCacheableDependency($access);
+
+    return $access->isAllowed();
   }
 
   /**

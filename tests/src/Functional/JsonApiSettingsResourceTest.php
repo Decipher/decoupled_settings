@@ -101,6 +101,22 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * Fetches the resource as whoever is logged in, keeping the session.
+   *
+   * The helper above restarts the session on purpose, which would log a
+   * test user out and turn an authenticated case into an anonymous one.
+   */
+  protected function fetchAsCurrentUser(string $query = ''): array {
+    $options = [];
+    if ($query !== '') {
+      parse_str($query, $params);
+      $options['query'] = $params;
+    }
+
+    return json_decode($this->drupalGet('/jsonapi/decoupled/settings', $options), TRUE) ?? [];
+  }
+
+  /**
    * Without the permission, nothing is disclosed.
    */
   public function testPermissionIsRequired(): void {
@@ -207,6 +223,53 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
     $anonymous = $this->fetch();
 
     $this->assertSame('Global Site', $anonymous['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * An authenticated caller may not name a consumer that is not theirs.
+   *
+   * This is the case worth closing: under the posture the README recommends
+   * for protected values, every app holding the scope could read every
+   * other app's overrides by naming it.
+   */
+  public function testAuthenticatedCallerCannotNameAnotherConsumer(): void {
+    $this->grantAnonymousRead();
+    $account = $this->drupalCreateUser(['read decoupled settings']);
+    $this->drupalLogin($account);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertNull($document['data']['attributes']['consumer']);
+    $this->assertSame('Global Site', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * Consumers' own view access is what opens the door for everyone else.
+   */
+  public function testConsumerViewAccessAllowsNamingAnother(): void {
+    $this->grantAnonymousRead();
+    $account = $this->drupalCreateUser([
+      'read decoupled settings',
+      'administer consumer entities',
+    ]);
+    $this->drupalLogin($account);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * An anonymous caller still names any consumer, which is unchanged.
+   */
+  public function testAnonymousCallerStillNamesAnyConsumer(): void {
+    $this->grantAnonymousRead();
+
+    $document = $this->fetch('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
   }
 
   /**
