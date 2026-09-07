@@ -193,10 +193,17 @@ class SettingsForm extends ConfigFormBase {
    * Lists the simple config objects that could be exposed, grouped by owner.
    *
    * Config entities are left out on purpose: they are entities, so core
-   * JSON:API can already serve them. This module exists for the simple
-   * config that core JSON:API cannot reach. An object with no schema is
-   * labelled rather than hidden, so choosing it is an informed act instead
-   * of a mystery.
+   * JSON:API serves them at their own endpoints. This module exists for the
+   * simple config that core JSON:API cannot reach.
+   *
+   * That reasoning does not hold everywhere, and the exclusion is under
+   * review because of it. Core serves a config entity as an entity, and
+   * what it exposes there can be thinner than the stored config: a request
+   * for date formats returns each label and not the pattern, which is the
+   * field a frontend wants. Reading the same object as config returns it.
+   *
+   * An object with no schema is labelled rather than hidden, so choosing it
+   * is an informed act instead of a mystery.
    */
   protected function availableObjects(array $exposed): array {
     $typed = $this->typedConfigManager();

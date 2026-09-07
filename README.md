@@ -151,11 +151,19 @@ extend the exclusion list to taste.
 
 **Q: Why can I not expose a config entity, such as a date format?**
 
-**A:** The exposure form lists simple config only. Config entities are
-already served by core's JSON:API, at their own endpoints and with their own
-access rules, so this module would be a second, weaker route to the same
-data. Setting one in `exposed_objects` by hand resolves, which makes the
-form look broken. It is not: the form is the supported surface.
+**A:** The exposure form lists simple config only, because core JSON:API
+serves config entities at their own endpoints with their own access rules.
+
+That answer has a known hole. Core serves a config entity as an entity, and
+what it exposes there can be thinner than the stored config. A date format
+is the case to know about: `/jsonapi/date_format/date_format` returns each
+format's label and nothing else, so a frontend rendering a date the way the
+site does receives the names of the formats and nothing to format with.
+Reading `core.date_format.long` as config returns the `pattern`.
+
+Setting a config entity in `exposed_objects` by hand does resolve, so a
+check made that way suggests the form is broken. It is not, but the
+exclusion is under review for exactly this reason.
 
 **Q: Why does `system.maintenance:message` contain `@site`?**
 
