@@ -7,7 +7,9 @@
 
 declare(strict_types=1);
 
+use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
 
 /**
  * Implements hook_install().
@@ -61,4 +63,30 @@ function decoupled_settings_update_10002(): string {
     return 'The theme manifest is available on the settings form, switched off.';
   }
   return 'The theme manifest flag was already set.';
+}
+
+/**
+ * Add the theme field to the consumer entity.
+ *
+ * Existing consumers keep an empty value, which means they follow the site
+ * default. So nothing about an existing site's responses changes until an
+ * administrator picks a theme for a consumer.
+ */
+function decoupled_settings_update_10003(): string {
+  $definition = BaseFieldDefinition::create('string')
+    ->setLabel(t('Theme'))
+    ->setDescription(t('The theme this consumer renders as. Its regions and settings are what this consumer reads. Leave empty to follow the site default.'))
+    ->setRevisionable(TRUE)
+    ->setDisplayOptions('form', ['type' => 'string_textfield', 'weight' => 90])
+    ->setDisplayConfigurable('form', TRUE);
+
+  \Drupal::entityDefinitionUpdateManager()
+    ->installFieldStorageDefinition(
+      ThemeManifest::THEME_FIELD,
+      'consumer',
+      'decoupled_settings',
+      $definition
+    );
+
+  return 'Consumers can now select the theme they render as.';
 }

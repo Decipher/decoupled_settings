@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\decoupled_settings\Kernel;
 
+use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\decoupled_settings\ThemeManifest;
 use Drupal\KernelTests\KernelTestBase;
 
 /**
@@ -45,6 +47,8 @@ class ThemeManifestTest extends KernelTestBase {
   protected function setUp(): void {
     parent::setUp();
 
+    $this->installEntitySchema('user');
+    $this->installEntitySchema('consumer');
     $this->installConfig(['system']);
     $this->container->get('theme_installer')->install(['stark']);
     $this->config('system.theme')->set('default', 'stark')->save();
@@ -186,7 +190,7 @@ class ThemeManifestTest extends KernelTestBase {
    * A response carries no manifest until the site exposes one.
    */
   public function testResponseCarriesNothingWhenNotExposed(): void {
-    $this->assertNull($this->manifest->forResponse(new CacheableMetadata()));
+    $this->assertNull($this->manifest->forResponse(NULL, new CacheableMetadata()));
   }
 
   /**
@@ -197,7 +201,7 @@ class ThemeManifestTest extends KernelTestBase {
       ->set('expose_theme_manifest', TRUE)
       ->save();
 
-    $manifest = $this->manifest->forResponse(new CacheableMetadata());
+    $manifest = $this->manifest->forResponse(NULL, new CacheableMetadata());
 
     $this->assertSame('stark', $manifest['default']);
   }
@@ -214,7 +218,7 @@ class ThemeManifestTest extends KernelTestBase {
       ->save();
     $this->config('system.theme')->set('default', 'no_such_theme')->save();
 
-    $this->assertNull($this->manifest->forResponse(new CacheableMetadata()));
+    $this->assertNull($this->manifest->forResponse(NULL, new CacheableMetadata()));
   }
 
   /**
@@ -224,12 +228,115 @@ class ThemeManifestTest extends KernelTestBase {
    */
   public function testTheExposureFlagIsCacheable(): void {
     $cacheability = new CacheableMetadata();
-    $this->manifest->forResponse($cacheability);
+    $this->manifest->forResponse(NULL, $cacheability);
 
     $this->assertContains(
       'config:decoupled_settings.settings',
       $cacheability->getCacheTags()
     );
+  }
+
+  /**
+   * A consumer that names a theme gets that theme, not the site default.
+   */
+  public function testConsumerThemeWinsOverTheSiteDefault(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $consumer = $this->createConsumer('claro');
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('claro', $manifest['default']);
+    $this->assertSame('claro.settings', $manifest['settings_object']);
+    $this->assertArrayHasKey('sidebar_first', $manifest['regions']);
+  }
+
+  /**
+   * A consumer that names no theme follows the site default.
+   *
+   * The same sparse rule the setting overrides use: storing nothing means
+   * following the site.
+   */
+  public function testConsumerWithNoThemeFollowsTheSite(): void {
+    $consumer = $this->createConsumer(NULL);
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('stark', $manifest['default']);
+  }
+
+  /**
+   * A consumer naming an uninstalled theme falls back rather than breaking.
+   *
+   * An uninstalled theme has no regions or settings to read, so the choice
+   * cannot be honoured. Serving the site default beats serving nothing.
+   */
+  public function testConsumerNamingAnUninstalledThemeFallsBack(): void {
+    $consumer = $this->createConsumer('no_such_theme');
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('stark', $manifest['default']);
+  }
+
+  /**
+   * The admin theme is the site's, whichever theme a consumer renders as.
+   *
+   * Nothing renders Drupal's admin UI for a consumer, so this is not a
+   * per-consumer value.
+   */
+  public function testAdminThemeStaysTheSitesOwn(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $this->config('system.theme')->set('admin', 'claro')->save();
+    $consumer = $this->createConsumer('claro');
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('claro', $manifest['admin']);
+  }
+
+  /**
+   * The consumer is a cacheable dependency once its theme is read.
+   *
+   * Without it, editing a consumer's theme would not invalidate a response.
+   */
+  public function testTheConsumerIsCacheable(): void {
+    $consumer = $this->createConsumer('stark');
+    $cacheability = new CacheableMetadata();
+
+    $this->container->get('decoupled_settings.theme_manifest')
+      ->build($cacheability, $consumer);
+
+    $this->assertContains(
+      'consumer:' . $consumer->id(),
+      $cacheability->getCacheTags()
+    );
+  }
+
+  /**
+   * Creates a consumer with a theme choice.
+   *
+   * @param string|null $theme
+   *   The theme machine name, or NULL for no choice.
+   *
+   * @return \Drupal\consumers\Entity\ConsumerInterface
+   *   The saved consumer.
+   */
+  protected function createConsumer(?string $theme) {
+    $values = [
+      'client_id' => 'test_app',
+      'label' => 'Test app',
+    ];
+    if ($theme !== NULL) {
+      $values[ThemeManifest::THEME_FIELD] = $theme;
+    }
+    $consumer = Consumer::create($values);
+    $consumer->save();
+
+    return $consumer;
   }
 
   /**
