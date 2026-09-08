@@ -11,6 +11,9 @@ decoupled_settings.settings:
     expose_theme_settings:
       type: boolean
       label: 'Expose the active theme settings'
+    expose_theme_manifest:
+      type: boolean
+      label: 'Expose the active theme structure'
     excluded_keys:
       type: sequence
       label: 'Never exposed keys'

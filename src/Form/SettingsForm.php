@@ -136,6 +136,13 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => (bool) $config->get('expose_theme_settings'),
     ];
 
+    $form['expose_theme_manifest'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Expose the active theme structure'),
+      '#description' => $this->t('Adds the theme regions, their labels and declared order, the hidden regions, the admin theme and the declared breakpoints. A frontend that lays out blocks by region reads them from here instead of hardcoding them. This describes the theme, so every consumer receives the same answer and it cannot be overridden.'),
+      '#default_value' => (bool) $config->get('expose_theme_manifest'),
+    ];
+
     $form['excluded_keys'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Excluded settings'),
@@ -321,6 +328,7 @@ class SettingsForm extends ConfigFormBase {
     $this->config('decoupled_settings.settings')
       ->set('exposed_objects', $form_state->get('exposed_working') ?: [])
       ->set('expose_theme_settings', (bool) $form_state->getValue('expose_theme_settings'))
+      ->set('expose_theme_manifest', (bool) $form_state->getValue('expose_theme_manifest'))
       ->set('excluded_keys', $this->lines($form_state->getValue('excluded_keys')))
       ->save();
 

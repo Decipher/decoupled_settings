@@ -110,6 +110,61 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * The theme manifest is absent until a site chooses to expose it.
+   *
+   * The flag ships off, so an existing site that updates does not silently
+   * start sending its theme structure.
+   */
+  public function testThemeManifestIsAbsentByDefault(): void {
+    $this->grantAnonymousRead();
+
+    $document = $this->fetch();
+
+    $this->assertNull($document['data']['attributes']['theme']);
+  }
+
+  /**
+   * Once exposed, the manifest names the theme and lists its regions.
+   */
+  public function testThemeManifestListsRegions(): void {
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+
+    $theme = $this->fetch()['data']['attributes']['theme'];
+
+    $default = $this->config('system.theme')->get('default');
+    $this->assertSame($default, $theme['default']);
+    $this->assertSame($default . '.settings', $theme['settings_object']);
+    $this->assertNotEmpty($theme['regions']);
+    $this->assertArrayHasKey('content', $theme['regions']);
+  }
+
+  /**
+   * The manifest describes the theme, so every consumer receives the same one.
+   *
+   * Two consumers that override different settings still read one structure.
+   * Regions are not a per-consumer decision, and this pins that.
+   */
+  public function testThemeManifestIsTheSameForEveryConsumer(): void {
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+
+    $a = $this->fetch('consumerId=consumer_a')['data']['attributes'];
+    $b = $this->fetch('consumerId=consumer_b')['data']['attributes'];
+
+    $this->assertNotSame(
+      $a['settings']['system.site']['name'],
+      $b['settings']['system.site']['name'],
+      'The two consumers do differ, so the comparison below means something.'
+    );
+    $this->assertSame($a['theme'], $b['theme']);
+  }
+
+  /**
    * An anonymous client with the permission reads the global values.
    */
   public function testGlobalValuesWithoutConsumer(): void {

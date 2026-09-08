@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- The active theme's structure is available as a `theme` attribute on the
+  response: the theme and admin theme names, the config object its settings
+  are read from, its regions as machine name to label in declared order, the
+  regions it hides, and the breakpoints it declares. Regions live in a
+  theme's `.info.yml`, so they are neither entities nor config and nothing
+  else exposes them. A decoupled frontend that groups blocks by region had
+  to hardcode the region names and the theme, and those copies drifted
+  silently. Off by default, and switched on with **Expose the active theme
+  structure**. Structure rather than settings, so it is the same for every
+  consumer and is not overridable.
+
 ## 1.0.0-beta2 (2026-08-26)
 
 ### Security

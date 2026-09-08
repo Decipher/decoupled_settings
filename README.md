@@ -62,6 +62,10 @@ Reading the exposed settings requires the **Read decoupled settings**
 permission. It is not granted to anonymous users. Grant it deliberately if a
 frontend reads settings without authenticating.
 
+The theme structure is off by default. Tick **Expose the active theme
+structure** on the same page to add it. It describes the theme rather than
+setting anything, so every consumer receives the same answer.
+
 Per-consumer overrides are edited on the consumer itself, at
 **Configuration > Services > Consumers > Settings**
 (`/admin/config/services/consumer/{consumer}/decoupled-settings`). Tick a
@@ -82,6 +86,10 @@ site value when it changes.
   address are excluded by default.
 - Logo and favicon come from core's theme settings resolution, as usable
   URLs with core's fallbacks.
+- The active theme's structure is available as a `theme` attribute: its
+  regions as machine name to label in declared order, the regions it hides,
+  the admin theme and the breakpoints it declares. A frontend that lays out
+  blocks by region reads them instead of hardcoding them. Off by default.
 - Responses carry the config cache tags of every object read, and a cache
   context for each consumer negotiation mechanism.
 
@@ -137,6 +145,34 @@ Undeclared keys are dropped rather than guessed at.
 **A:** Yes. Implement `hook_decoupled_settings_global_alter()` to contribute a
 group of computed values. A contributed setting is overridable per consumer,
 exactly like one read from config. See `decoupled_settings.api.php`.
+
+**Q: How does a frontend know which settings group belongs to the theme?**
+
+**A:** Expose the theme structure. Its `settings_object` names the config
+object the theme's settings are read from, so a client reads that group
+rather than guessing which of the exposed groups is the theme's.
+
+**Q: Why are hidden regions reported instead of removed?**
+
+**A:** Because the two lists answer different questions, and Drupal's own
+answer is worth passing on intact. Core appends `page_top` and `page_bottom`
+to every theme's hidden list, and a theme can hide a region it never
+declares, so the hidden list is not a subset of the regions. Both are
+reported as recorded, and the client decides what to render.
+
+**Q: Can a consumer be given different regions?**
+
+**A:** No. The structure describes the theme, so it is the same for every
+consumer and is not merged with the per-consumer overrides. A consumer that
+needs a different structure needs a different theme, which this module does
+not select.
+
+**Q: Does it describe how regions nest?**
+
+**A:** No, and it will not. Nesting and render order exist only in the
+theme's `page.html.twig`, not in any data Drupal records. Reporting them
+would mean parsing templates. What is reported is the flat map the theme
+declares plus the order it declares it in.
 
 ## Maintainers
 
