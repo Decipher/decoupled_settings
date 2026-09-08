@@ -7,7 +7,6 @@ namespace Drupal\decoupled_settings\Resource;
 use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Cache\CacheableResponseInterface;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\decoupled_settings\ConsumerAccess;
@@ -37,7 +36,6 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     private readonly SettingsResolver $settingsResolver,
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly ConsumerAccess $consumerAccess,
-    private readonly ConfigFactoryInterface $configFactory,
     private readonly ThemeManifest $themeManifest,
   ) {}
 
@@ -49,28 +47,8 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       $container->get('decoupled_settings.resolver'),
       $container->get('entity_type.manager'),
       $container->get('decoupled_settings.consumer_access'),
-      $container->get('config.factory'),
       $container->get('decoupled_settings.theme_manifest'),
     );
-  }
-
-  /**
-   * Builds the theme manifest, when the site exposes it.
-   *
-   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
-   *   Collects the cache tags of everything that is read.
-   *
-   * @return array|null
-   *   The manifest, or NULL when it is not exposed.
-   */
-  private function manifest(CacheableMetadata $cacheability): ?array {
-    $settings = $this->configFactory->get('decoupled_settings.settings');
-    $cacheability->addCacheableDependency($settings);
-    if (!$settings->get('expose_theme_manifest')) {
-      return NULL;
-    }
-
-    return $this->themeManifest->build($cacheability) ?: NULL;
   }
 
   /**
@@ -110,7 +88,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       [
         'settings' => $resolved,
         'consumer' => $consumer?->getClientId(),
-        'theme' => $this->manifest($cacheability),
+        'theme' => $this->themeManifest->forResponse($cacheability),
       ],
       new LinkCollection([])
     );
