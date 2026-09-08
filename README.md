@@ -170,9 +170,22 @@ rather than guessing which of the exposed groups is the theme's.
 
 **A:** Because the two lists answer different questions, and Drupal's own
 answer is worth passing on intact. Core appends `page_top` and `page_bottom`
-to every theme's hidden list, and a theme can hide a region it never
-declares, so the hidden list is not a subset of the regions. Both are
-reported as recorded, and the client decides what to render.
+to every theme's hidden list in `system_info_alter()`, whether or not the
+theme declares them as regions.
+
+The hidden list is therefore not a subset of the regions, and on a stock
+Olivero the two do not intersect at all: 13 regions, none of them `page_top`,
+and `page_top` and `page_bottom` both hidden. So this, the obvious
+implementation, is a no-op that looks like it works:
+
+```js
+// Wrong. On Olivero it removes nothing, and does so silently.
+const visible = Object.keys(regions).filter((r) => !regions_hidden.includes(r))
+```
+
+Filter if a hidden region should not be rendered, but do not assume the
+filter removed anything, and do not treat the hidden list as a description of
+the regions above it.
 
 **Q: Can a consumer be given different regions?**
 
