@@ -10,6 +10,13 @@ services:
     arguments:
       - '@current_user'
 
+  decoupled_settings.theme_manifest:
+    class: Drupal\decoupled_settings\ThemeManifest
+    arguments:
+      - '@config.factory'
+      - '@theme_handler'
+      - '@?breakpoint.manager'
+
   decoupled_settings.merger:
     class: Drupal\decoupled_settings\SettingsMerger
 

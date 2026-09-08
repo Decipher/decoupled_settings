@@ -46,3 +46,19 @@ function decoupled_settings_update_10001(): string {
   }
   return 'system.site:mail_notification was already excluded.';
 }
+
+/**
+ * Add the theme manifest exposure flag, switched off.
+ *
+ * The manifest describes the active theme's regions and breakpoints. It is
+ * new, so an existing site is not opted in to sending it: exposure stays a
+ * decision an administrator makes.
+ */
+function decoupled_settings_update_10002(): string {
+  $config = \Drupal::configFactory()->getEditable('decoupled_settings.settings');
+  if ($config->get('expose_theme_manifest') === NULL) {
+    $config->set('expose_theme_manifest', FALSE)->save();
+    return 'The theme manifest is available on the settings form, switched off.';
+  }
+  return 'The theme manifest flag was already set.';
+}

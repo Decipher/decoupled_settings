@@ -8,6 +8,18 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+- The active theme's structure is available as a `theme` attribute on the
+  response: the theme and admin theme names, the config object its settings
+  are read from, its regions as machine name to label in declared order, the
+  regions it hides, and the breakpoints it declares. Regions live in a
+  theme's `.info.yml`, so they are neither entities nor config and nothing
+  else exposes them. A decoupled frontend that groups blocks by region had
+  to hardcode the region names and the theme, and those copies drifted
+  silently. Off by default, and switched on with **Expose the active theme
+  structure**. Structure rather than settings, so it is the same for every
+  consumer and is not overridable.
+
 ### Security
 - Naming a consumer now requires access to that consumer. Anyone holding
   **Read decoupled settings** could read any consumer's overrides by naming

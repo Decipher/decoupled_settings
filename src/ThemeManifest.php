@@ -1,0 +1,140 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\decoupled_settings;
+
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Extension\ThemeHandlerInterface;
+
+/**
+ * Describes the active theme's structure.
+ *
+ * A theme declares its regions in its .info.yml file. Regions are not
+ * entities and not config, so nothing exposes them over JSON:API. A
+ * decoupled frontend that groups blocks by region has to hardcode the region
+ * names and the theme they belong to, and those copies drift from the
+ * backend without any error.
+ *
+ * This class reads what Drupal records, and only that. It does not read
+ * templates.
+ *
+ * The manifest is structure, not settings. It is the same for every
+ * consumer, so it is not merged with the per-consumer overrides.
+ */
+final readonly class ThemeManifest {
+
+  /**
+   * Constructs the manifest builder.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
+   *   The config factory.
+   * @param \Drupal\Core\Extension\ThemeHandlerInterface $themeHandler
+   *   The theme handler.
+   * @param object|null $breakpointManager
+   *   The breakpoint manager. Typed object on purpose: the service only
+   *   exists while the breakpoint module is installed.
+   */
+  public function __construct(
+    private ConfigFactoryInterface $configFactory,
+    private ThemeHandlerInterface $themeHandler,
+    private ?object $breakpointManager = NULL,
+  ) {}
+
+  /**
+   * Builds the manifest for the site's active theme.
+   *
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   *
+   * @return array
+   *   The manifest. Empty if the default theme is not installed.
+   */
+  public function build(CacheableMetadata $cacheability): array {
+    $system_theme = $this->configFactory->get('system.theme');
+    $cacheability->addCacheableDependency($system_theme);
+
+    // A theme is added or removed by installing it, which rewrites
+    // core.extension. The .info.yml itself only changes with the code.
+    $cacheability->addCacheTags(['config:core.extension']);
+
+    $default = (string) ($system_theme->get('default') ?? '');
+    $info = $this->themeInfo($default);
+    if ($info === NULL) {
+      return [];
+    }
+
+    $regions = $info['regions'] ?? [];
+
+    return [
+      'default' => $default,
+      'admin' => (string) ($system_theme->get('admin') ?? '') ?: NULL,
+      // The config object the theme's own settings are read from. A client
+      // reads the settings group under this name instead of guessing which
+      // group belongs to the theme.
+      'settings_object' => $default . '.settings',
+      // Machine name to label, in the order the theme declares them. That
+      // order is the only ordering Drupal records.
+      'regions' => array_map(strval(...), $regions),
+      // Regions the theme hides from the block layout screen. Core appends
+      // page_top and page_bottom to every theme in system_info_alter(), so
+      // this list is never empty and can name a region the theme does not
+      // declare. It is passed through as recorded, not subtracted from the
+      // regions above, because a client may have its own reason to render
+      // one.
+      'regions_hidden' => array_values($info['regions_hidden'] ?? []),
+      'breakpoints' => $this->breakpoints($default),
+    ];
+  }
+
+  /**
+   * Reads one theme's .info.yml data.
+   *
+   * @return array|null
+   *   The theme info, or NULL if the theme is not installed.
+   */
+  private function themeInfo(string $theme): ?array {
+    if ($theme === '') {
+      return NULL;
+    }
+    try {
+      return $this->themeHandler->getTheme($theme)->info ?? NULL;
+    }
+    catch (\Throwable) {
+      // The default theme names a theme that is not installed. That is a
+      // broken site, but it must not break this endpoint.
+      return NULL;
+    }
+  }
+
+  /**
+   * Reads the breakpoints a theme declares.
+   *
+   * Breakpoints live in a separate .breakpoints.yml file and are only
+   * readable while the breakpoint module is installed.
+   *
+   * @return array
+   *   Breakpoint id to its label, media query and multipliers. Empty when
+   *   the module is not installed or the theme declares none.
+   */
+  private function breakpoints(string $theme): array {
+    $manager = $this->breakpointManager;
+    if ($manager === NULL || !method_exists($manager, 'getBreakpointsByGroup')) {
+      return [];
+    }
+
+    $breakpoints = [];
+    foreach ($manager->getBreakpointsByGroup($theme) as $id => $breakpoint) {
+      $breakpoints[$id] = [
+        'label' => (string) $breakpoint->getLabel(),
+        'mediaQuery' => $breakpoint->getMediaQuery(),
+        'weight' => (int) $breakpoint->getWeight(),
+        'multipliers' => array_values($breakpoint->getMultipliers()),
+      ];
+    }
+
+    return $breakpoints;
+  }
+
+}
