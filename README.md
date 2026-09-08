@@ -154,12 +154,26 @@ extend the exclusion list to taste.
 **A:** The exposure form lists simple config only, because core JSON:API
 serves config entities at their own endpoints with their own access rules.
 
-That answer has a known hole. Core serves a config entity as an entity, and
-what it exposes there can be thinner than the stored config. A date format
-is the case to know about: `/jsonapi/date_format/date_format` returns each
-format's label and nothing else, so a frontend rendering a date the way the
-site does receives the names of the formats and nothing to format with.
-Reading `core.date_format.long` as config returns the `pattern`.
+That answer has a known hole, and it is about access rather than coverage.
+A date format is the case to know about. To an unprivileged or anonymous
+client, `/jsonapi/date_format/date_format` returns each format's label and
+nothing else, so a frontend rendering a date the way the site does receives
+the names of the formats and nothing to format with. Reading
+`core.date_format.long` as config returns the `pattern`.
+
+Core is not withholding the field for lack of support. `date_format`
+declares `admin_permission: 'administer site configuration'`, and to a
+client holding it the same endpoint serves `pattern` along with everything
+else the entity exports. What an unprivileged client gets instead is a
+label-only resource, which JSON:API returns when `view` is denied but
+`view label` is allowed.
+
+Two things follow. Reaching that field over core JSON:API means granting a
+frontend site-administration permission, which is not a trade worth making
+for a date pattern. And the refusal is silent: same HTTP 200, no error, and
+none of the `meta.omitted` explanation that the fully-denied path gives, so
+asking for `pattern` through `fields[]` returns items with no attributes at
+all and no reason. A client cannot tell a withheld field from an empty one.
 
 Setting a config entity in `exposed_objects` by hand does resolve, so a
 check made that way suggests the form is broken. It is not, but the

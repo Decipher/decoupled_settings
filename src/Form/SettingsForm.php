@@ -197,10 +197,15 @@ class SettingsForm extends ConfigFormBase {
    * simple config that core JSON:API cannot reach.
    *
    * That reasoning does not hold everywhere, and the exclusion is under
-   * review because of it. Core serves a config entity as an entity, and
-   * what it exposes there can be thinner than the stored config: a request
-   * for date formats returns each label and not the pattern, which is the
-   * field a frontend wants. Reading the same object as config returns it.
+   * review because of it. What core serves depends on who is asking. A
+   * date format declares an admin permission, so an unprivileged client
+   * gets a label-only resource: each format's label and not the pattern,
+   * which is the field a frontend wants. An administrator gets the
+   * pattern. Reading the same object as config returns it to anyone the
+   * site chose to expose it to.
+   *
+   * So the barrier is access, not coverage, and the refusal is silent: the
+   * response is a 200 with fewer attributes and no explanation.
    *
    * An object with no schema is labelled rather than hidden, so choosing it
    * is an informed act instead of a mystery.
