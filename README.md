@@ -139,7 +139,7 @@ up as missing instead of dropping silently.
 | Setting | Default | Adds to the response |
 | --- | --- | --- |
 | Exposed config objects | `system.site` | Each listed object, schema-declared keys only |
-| Expose the active theme settings | On | The default theme's settings, with logo and favicon resolved |
+| Expose the active theme settings | On | The consumer's theme settings, with logo and favicon resolved |
 | Expose the active theme structure | Off | The `theme` attribute |
 
 The consumer screen holds one consumer's overrides, and is reached from the
@@ -249,17 +249,18 @@ instead of guessing.
 
 **Q: What does exposing the theme structure disclose?**
 
-**A:** For a core or contributed theme, everything in the table above is
-already public in its source. The admin theme's name is the one item a
-decoupled site does not otherwise publish, so a site running a custom admin
-theme discloses that name. That is fingerprinting, not access, and it is why
-the attribute is opt-in.
+**A:** The regions, hidden regions and breakpoints of a core or contributed
+theme are already public in that theme's source, and so is the name of a
+theme a site renders publicly. The admin theme's name is different: it is a
+site's own configuration, and a decoupled site does not otherwise publish
+it, so a site running a custom admin theme discloses that name here. That is
+fingerprinting, not access, and it is why the attribute is opt-in.
 
 The structure names the admin theme but does not expose its settings. To
 serve those, add `claro.settings`, or whichever theme it is, to the exposure
 list. That entry is a literal object name. It will not follow a later change
-of admin theme, the way **Expose the active theme settings** follows a
-change of default theme.
+of admin theme, the way **Expose the active theme settings** follows the
+consumer's theme, or the site default when the consumer selects none.
 
 **Q: Why does `regions_hidden` name regions that are not in `regions`?**
 

@@ -94,6 +94,12 @@ final readonly class ThemeManifest {
       return [];
     }
 
+    // The admin theme is read below whichever theme the consumer renders as,
+    // and themeFor() returns before reading system.theme when a consumer
+    // picked one. So depend on it here rather than relying on that path.
+    $system_theme = $this->configFactory->get('system.theme');
+    $cacheability->addCacheableDependency($system_theme);
+
     $regions = $info['regions'] ?? [];
 
     return [
@@ -102,7 +108,7 @@ final readonly class ThemeManifest {
       // if an administrator lists the object explicitly. It is the site's
       // admin theme in every case: a consumer chooses what it renders as,
       // and nothing renders Drupal's admin UI for a consumer.
-      'admin' => (string) ($this->configFactory->get('system.theme')->get('admin') ?? '') ?: NULL,
+      'admin' => (string) ($system_theme->get('admin') ?? '') ?: NULL,
       // The config object the theme's own settings are read from. A client
       // reads the settings group under this name instead of guessing which
       // group belongs to the theme. Naming it does not expose it: the group
