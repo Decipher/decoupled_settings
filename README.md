@@ -50,41 +50,29 @@ Submit bug reports and feature suggestions, or track changes in the
 
 ## Configuration
 
-The exposure list is stored in `decoupled_settings.settings`. On install it
-exposes `system.site` and the active theme's settings, and nothing else.
+Two screens, both under **Configuration > Services**.
 
-Manage the exposure list at **Configuration > Services > Decoupled Settings**
-(`/admin/config/services/decoupled-settings`). The page shows what a frontend
-would read right now, so a key missing for lack of schema is visible rather
-than silent.
+| Screen | Path |
+| --- | --- |
+| Decoupled Settings | `/admin/config/services/decoupled-settings` |
+| A consumer's overrides | `/admin/config/services/consumer/{consumer}/decoupled-settings` |
 
-Reading the exposed settings requires the **Read decoupled settings**
-permission. It is not granted to anonymous users. Grant it deliberately if a
-frontend reads settings without authenticating.
+The first decides what leaves the site. It previews what a frontend would
+read right now, so a key missing for lack of schema is visible rather than
+silent.
 
-The theme structure is off by default. Tick **Expose the active theme
-structure** on the same page to add it. It describes the theme rather than
-setting anything, so every consumer receives the same answer.
+| Setting | Default | Adds to the response |
+| --- | --- | --- |
+| Exposed config objects | `system.site` | Each listed object, schema-declared keys only |
+| Expose the active theme settings | On | The default theme's settings, with logo and favicon resolved |
+| Expose the active theme structure | Off | Regions, hidden regions, breakpoints, and the theme names |
 
-What that discloses: the region machine names and labels, the hidden
-regions, the declared breakpoints, and the names of the default and admin
-themes. The regions and breakpoints of a core or contributed theme are
-already public in its source. The admin theme's *name* is the one item a
-decoupled site does not otherwise publish, so a site running a custom admin
-theme discloses that name by ticking this. It is fingerprinting rather than
-access, and the whole attribute is opt-in for that reason.
+The second is per consumer. Tick a setting to override it. Anything left
+unticked is inherited, and follows the site value when it changes.
 
-The admin theme's *settings* are not included. A site that wants them adds
-the object to the exposure list by name, for example `claro.settings`, which
-reads through the same theme resolution as the active theme. Note that the
-list is literal: it does not follow a later change of admin theme the way
-**Expose the active theme settings** follows the default theme.
-
-Per-consumer overrides are edited on the consumer itself, at
-**Configuration > Services > Consumers > Settings**
-(`/admin/config/services/consumer/{consumer}/decoupled-settings`). Tick a
-setting to override it. Anything left unticked is inherited, and follows the
-site value when it changes.
+Reading any of this requires the **Read decoupled settings** permission,
+which is not granted to anonymous users. Grant it deliberately if a frontend
+reads settings without authenticating.
 
 ## Features
 
@@ -162,21 +150,30 @@ exactly like one read from config. See `decoupled_settings.api.php`.
 
 **Q: How does a frontend know which settings group belongs to the theme?**
 
-**A:** Expose the theme structure. Its `settings_object` names the config
-object the theme's settings are read from, so a client reads that group
-rather than guessing which of the exposed groups is the theme's.
+**A:** The structure's `settings_object` names it, so a client reads that
+group rather than guessing which of the exposed groups is the theme's.
 
-**Q: Why are hidden regions reported instead of removed?**
+**Q: What does exposing the theme structure disclose?**
 
-**A:** Because the two lists answer different questions, and Drupal's own
-answer is worth passing on intact. Core appends `page_top` and `page_bottom`
-to every theme's hidden list in `system_info_alter()`, whether or not the
-theme declares them as regions.
+**A:** Region machine names and labels, the hidden regions, the declared
+breakpoints, and the names of the default and admin themes. For a core or
+contributed theme all of that is already public in its source. The admin
+theme's name is the one item a decoupled site does not otherwise publish, so
+a site running a custom admin theme discloses that name. Fingerprinting
+rather than access, which is why the attribute is opt-in.
 
-The hidden list is therefore not a subset of the regions, and on a stock
-Olivero the two do not intersect at all: 13 regions, none of them `page_top`,
-and `page_top` and `page_bottom` both hidden. So this, the obvious
-implementation, is a no-op that looks like it works:
+The structure names the admin theme but does not read it. To serve its
+settings, add `claro.settings`, or whichever theme it is, to the exposure
+list. That entry is literal, so unlike **Expose the active theme settings**
+it will not follow a later change of admin theme.
+
+**Q: Why does `regions_hidden` name regions that are not in `regions`?**
+
+**A:** Because core appends `page_top` and `page_bottom` to every theme in
+`system_info_alter()`, whether or not the theme declares them. On a stock
+Olivero the two lists do not intersect at all: 13 regions, none of them
+`page_top`, and both reserves hidden. So this, the obvious implementation,
+is a no-op that looks like it works:
 
 ```js
 // Wrong. On Olivero it removes nothing, and does so silently.
@@ -184,22 +181,15 @@ const visible = Object.keys(regions).filter((r) => !regions_hidden.includes(r))
 ```
 
 Filter if a hidden region should not be rendered, but do not assume the
-filter removed anything, and do not treat the hidden list as a description of
-the regions above it.
+filter removed anything.
 
-**Q: Can a consumer be given different regions?**
+**Q: Can a consumer be given different regions, or the nesting order?**
 
-**A:** No. The structure describes the theme, so it is the same for every
-consumer and is not merged with the per-consumer overrides. A consumer that
-needs a different structure needs a different theme, which this module does
-not select.
-
-**Q: Does it describe how regions nest?**
-
-**A:** No, and it will not. Nesting and render order exist only in the
-theme's `page.html.twig`, not in any data Drupal records. Reporting them
-would mean parsing templates. What is reported is the flat map the theme
-declares plus the order it declares it in.
+**A:** Neither, today. The structure describes the theme, so it is the same
+for every consumer and is not merged with the overrides. Nesting and render
+order are not included at all: they exist only in the theme's
+`page.html.twig`, and reporting them would mean parsing templates. What is
+reported is the flat map the theme declares, in its declared order.
 
 ## Maintainers
 
