@@ -13,8 +13,8 @@ and this project adheres to
   **Read decoupled settings** could read any consumer's overrides by naming
   it in the header or the query, which under the recommended posture for
   protected values meant every app holding the scope reading every other
-  app's. Consumers decides who may view a consumer, so no permission of this
-  module's own was added. Anonymous callers are unchanged, and an app still
+  app's. Consumers stays the answer to who may view a consumer, so nothing
+  here replaces that check. Anonymous callers are unchanged, and an app still
   reads itself: Simple OAuth authenticates a token as the account in the
   consumer's `user_id`. A refused consumer reads as an unknown one, the
   global values with a null consumer, rather than a 403 that would confirm
