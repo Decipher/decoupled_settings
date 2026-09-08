@@ -317,6 +317,24 @@ class ThemeManifestTest extends KernelTestBase {
   }
 
   /**
+   * A consumer's own theme still depends on system.theme, for the admin name.
+   *
+   * The resolver returns before reading system.theme when the consumer
+   * picked a theme, so without an explicit dependency the response would
+   * cache with a stale admin theme name and never be invalidated.
+   */
+  public function testConsumerThemeStillDependsOnSystemTheme(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $consumer = $this->createConsumer('claro');
+    $cacheability = new CacheableMetadata();
+
+    $this->container->get('decoupled_settings.theme_manifest')
+      ->build($cacheability, $consumer);
+
+    $this->assertContains('config:system.theme', $cacheability->getCacheTags());
+  }
+
+  /**
    * Creates a consumer with a theme choice.
    *
    * @param string|null $theme
