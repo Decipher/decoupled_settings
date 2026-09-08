@@ -5,6 +5,11 @@ services:
       - '@config.factory'
       - '@?Drupal\Core\Extension\ThemeSettingsProvider'
 
+  decoupled_settings.consumer_access:
+    class: Drupal\decoupled_settings\ConsumerAccess
+    arguments:
+      - '@current_user'
+
   decoupled_settings.merger:
     class: Drupal\decoupled_settings\SettingsMerger
 
