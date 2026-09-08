@@ -139,7 +139,7 @@ class SettingsForm extends ConfigFormBase {
     $form['expose_theme_manifest'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Expose the active theme structure'),
-      '#description' => $this->t('Adds the theme regions, their labels and declared order, the hidden regions, the admin theme and the declared breakpoints. A frontend that lays out blocks by region reads them from here instead of hardcoding them. This describes the theme, so every consumer receives the same answer and it cannot be overridden.'),
+      '#description' => $this->t('Adds the theme regions, their labels and declared order, the hidden regions, the names of the default and admin themes, and the declared breakpoints. A frontend that lays out blocks by region reads them from here instead of hardcoding them. This describes the theme, so every consumer receives the same answer and it cannot be overridden. The admin theme is named, not read: to expose its settings, add them to the list above by name.'),
       '#default_value' => (bool) $config->get('expose_theme_manifest'),
     ];
 
