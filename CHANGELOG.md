@@ -24,8 +24,9 @@ and this project adheres to
   else exposes them. A decoupled frontend that groups blocks by region had
   to hardcode the region names and the theme, and those copies drifted
   silently. Off by default, and switched on with **Expose the active theme
-  structure**. Structure rather than settings, so it is the same for every
-  consumer and is not overridable.
+  structure**. Structure rather than settings: it follows the consumer's
+  theme, or the site default when the consumer selects none, and is not
+  overridable key by key the way a setting is.
 
 ## 1.0.0-beta2 (2026-08-26)
 
