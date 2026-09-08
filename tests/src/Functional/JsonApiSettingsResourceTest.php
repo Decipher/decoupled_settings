@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\decoupled_settings\Functional;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\decoupled_settings\SettingsResolver;
 use Behat\Mink\Driver\BrowserKitDriver;
 use Drupal\Tests\BrowserTestBase;
@@ -68,6 +69,40 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
       'label' => 'Consumer B',
       SettingsResolver::OVERRIDE_FIELD => ['system.site:name' => 'Site B'],
     ])->save();
+  }
+
+  /**
+   * Creates an account with the given permissions and logs it in.
+   *
+   * Drupal 10 declares drupalCreateUser() as returning User or FALSE, so the
+   * failure is handled rather than passed on to drupalLogin().
+   *
+   * @param array $permissions
+   *   The permissions to grant the new account.
+   */
+  protected function loginWith(array $permissions): void {
+    $this->drupalLogin($this->asAccount($this->drupalCreateUser($permissions)));
+  }
+
+  /**
+   * Narrows a created account to an account.
+   *
+   * Drupal 10 declares drupalCreateUser() as returning User or FALSE, and
+   * Drupal 11 as returning UserInterface. Taking mixed here means the check
+   * is neither missing on one major nor redundant on the other.
+   *
+   * @param mixed $account
+   *   The value drupalCreateUser() returned.
+   *
+   * @return \Drupal\Core\Session\AccountInterface
+   *   The account.
+   */
+  protected function asAccount(mixed $account): AccountInterface {
+    if (!$account instanceof AccountInterface) {
+      throw new \RuntimeException('The test account could not be created.');
+    }
+
+    return $account;
   }
 
   /**
@@ -234,8 +269,7 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
    */
   public function testAuthenticatedCallerCannotNameAnotherConsumer(): void {
     $this->grantAnonymousRead();
-    $account = $this->drupalCreateUser(['read decoupled settings']);
-    $this->drupalLogin($account);
+    $this->loginWith(['read decoupled settings']);
 
     $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
 
@@ -251,11 +285,10 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
    */
   public function testReadAnyConsumerPermissionAllowsNaming(): void {
     $this->grantAnonymousRead();
-    $account = $this->drupalCreateUser([
+    $this->loginWith([
       'read decoupled settings',
       'read any consumer decoupled settings',
     ]);
-    $this->drupalLogin($account);
 
     $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
 
@@ -268,11 +301,10 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
    */
   public function testConsumerViewAccessAllowsNamingAnother(): void {
     $this->grantAnonymousRead();
-    $account = $this->drupalCreateUser([
+    $this->loginWith([
       'read decoupled settings',
       'administer consumer entities',
     ]);
-    $this->drupalLogin($account);
 
     $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
 
