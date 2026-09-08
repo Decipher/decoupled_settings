@@ -66,6 +66,20 @@ The theme structure is off by default. Tick **Expose the active theme
 structure** on the same page to add it. It describes the theme rather than
 setting anything, so every consumer receives the same answer.
 
+What that discloses: the region machine names and labels, the hidden
+regions, the declared breakpoints, and the names of the default and admin
+themes. The regions and breakpoints of a core or contributed theme are
+already public in its source. The admin theme's *name* is the one item a
+decoupled site does not otherwise publish, so a site running a custom admin
+theme discloses that name by ticking this. It is fingerprinting rather than
+access, and the whole attribute is opt-in for that reason.
+
+The admin theme's *settings* are not included. A site that wants them adds
+the object to the exposure list by name, for example `claro.settings`, which
+reads through the same theme resolution as the active theme. Note that the
+list is literal: it does not follow a later change of admin theme the way
+**Expose the active theme settings** follows the default theme.
+
 Per-consumer overrides are edited on the consumer itself, at
 **Configuration > Services > Consumers > Settings**
 (`/admin/config/services/consumer/{consumer}/decoupled-settings`). Tick a

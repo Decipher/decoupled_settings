@@ -69,10 +69,13 @@ final readonly class ThemeManifest {
 
     return [
       'default' => $default,
+      // The admin theme is named, not read. Its settings are exposed only
+      // if an administrator lists the object explicitly.
       'admin' => (string) ($system_theme->get('admin') ?? '') ?: NULL,
       // The config object the theme's own settings are read from. A client
       // reads the settings group under this name instead of guessing which
-      // group belongs to the theme.
+      // group belongs to the theme. Naming it does not expose it: the group
+      // is absent unless the theme settings are exposed too.
       'settings_object' => $default . '.settings',
       // Machine name to label, in the order the theme declares them. That
       // order is the only ordering Drupal records.
