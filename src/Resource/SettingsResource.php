@@ -85,7 +85,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       [
         'settings' => $resolved,
         'consumer' => $consumer?->getClientId(),
-        'theme' => $this->themeManifest->forResponse($cacheability),
+        'theme' => $this->themeManifest->forResponse($consumer, $cacheability),
       ],
       new LinkCollection([])
     );

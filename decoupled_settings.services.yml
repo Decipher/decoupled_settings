@@ -23,6 +23,7 @@ services:
       - '@decoupled_settings.theme_settings_reader'
       - '@decoupled_settings.merger'
       - '@module_handler'
+      - '@decoupled_settings.theme_manifest'
 
   decoupled_settings.page_cache_deny_consumer_header:
     class: Drupal\decoupled_settings\PageCache\DenyOnConsumerHeader

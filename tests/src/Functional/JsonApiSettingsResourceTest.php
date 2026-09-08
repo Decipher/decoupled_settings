@@ -6,6 +6,7 @@ namespace Drupal\Tests\decoupled_settings\Functional;
 
 use Drupal\consumers\Entity\Consumer;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
 use Behat\Mink\Driver\BrowserKitDriver;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\user\Entity\Role;
@@ -110,6 +111,37 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * A consumer's theme choice changes both the structure and the settings.
+   *
+   * The two move together on purpose. The manifest's settings_object names
+   * the group a client should read, so delivering another theme's settings
+   * under a different key would be a lie the client cannot detect.
+   */
+  public function testConsumerThemeChangesTheStructureAndTheSettings(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+    Consumer::create([
+      'client_id' => 'consumer_claro',
+      'label' => 'Consumer on Claro',
+      ThemeManifest::THEME_FIELD => 'claro',
+    ])->save();
+
+    $attributes = $this->fetch('consumerId=consumer_claro')['data']['attributes'];
+
+    $this->assertSame('claro', $attributes['theme']['default']);
+    $this->assertSame('claro.settings', $attributes['theme']['settings_object']);
+    $this->assertArrayHasKey('claro.settings', $attributes['settings']);
+    $this->assertArrayNotHasKey('stark.settings', $attributes['settings']);
+
+    // A consumer that made no choice is unaffected.
+    $other = $this->fetch('consumerId=consumer_b')['data']['attributes'];
+    $this->assertNotSame('claro', $other['theme']['default']);
+  }
+
+  /**
    * The theme manifest is absent until a site chooses to expose it.
    *
    * The flag ships off, so an existing site that updates does not silently
@@ -142,10 +174,11 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
-   * The manifest describes the theme, so every consumer receives the same one.
+   * Consumers that choose no theme read the same structure.
    *
-   * Two consumers that override different settings still read one structure.
-   * Regions are not a per-consumer decision, and this pins that.
+   * A consumer can select a theme, but neither of these does, so both follow
+   * the site and receive one identical structure even though their settings
+   * differ.
    */
   public function testThemeManifestIsTheSameForEveryConsumer(): void {
     $this->grantAnonymousRead();

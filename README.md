@@ -147,6 +147,10 @@ consumer itself rather than from the Services menu. Tick a setting to
 override it. Anything left unticked is inherited, and follows the site value
 when it changes.
 
+A consumer can also select the **theme** it renders as, on the consumer edit
+form. That decides which theme's regions and settings it reads. Leave it
+empty and the consumer follows the site default.
+
 Reading any of this requires the **Read decoupled settings** permission,
 which is not granted to anonymous users. Granting it to the anonymous role
 at `/admin/people/permissions` makes every exposed key public.
@@ -276,11 +280,25 @@ const visible = Object.keys(regions).filter((r) => !regions_hidden.includes(r))
 Filter if you need to, and check the result. A filter that removes nothing
 looks the same as one that works.
 
-**Q: Can a consumer have its own regions, or the nesting order?**
+**Q: Can a consumer have its own regions?**
 
-**A:** Neither, today. The structure describes the theme, so it is the same
-for every consumer and is not merged with the overrides. Nesting and render
-order are not included at all: they exist only in the theme's
+**A:** Yes, by selecting its own theme. Regions come from a theme's
+`.info.yml`, so two consumers on different themes read different region
+sets, and block layout in Drupal is partitioned by theme and nothing else.
+That is what makes block configuration usable for driving one frontend.
+
+The theme's settings move with it. A consumer on `claro` reads
+`claro.settings`, and its `settings_object` says so. The two always agree:
+naming one theme while delivering another's settings would be a lie a client
+could not detect.
+
+Two consumers can select the same theme, so the theme is not an identity.
+Anything that has to distinguish one consumer from another belongs on the
+consumer.
+
+**Q: Can a consumer have the nesting order of regions?**
+
+**A:** No. Nesting and render order exist only in the theme's
 `page.html.twig`, and reporting them would mean parsing templates. What is
 reported is the flat map the theme declares, in its declared order.
 

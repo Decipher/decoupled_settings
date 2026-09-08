@@ -39,6 +39,7 @@ final readonly class SettingsResolver {
     private ThemeSettingsReader $themeSettingsReader,
     private SettingsMerger $settingsMerger,
     private ModuleHandlerInterface $moduleHandler,
+    private ThemeManifest $themeManifest,
   ) {}
 
   /**
@@ -56,11 +57,16 @@ final readonly class SettingsResolver {
     $settings = $this->configFactory->get('decoupled_settings.settings');
     $cacheability->addCacheableDependency($settings);
 
+    // The theme settings a consumer reads are its own theme's, so the group
+    // the manifest names in settings_object is the group that is delivered.
+    // Naming one theme and shipping another's settings would be a lie the
+    // client cannot detect.
     $globals = $this->globals(
       $settings->get('exposed_objects') ?: [],
       (bool) $settings->get('expose_theme_settings'),
       $settings->get('excluded_keys') ?: [],
-      $cacheability
+      $cacheability,
+      $this->themeManifest->themeFor($consumer, $cacheability)
     );
 
     $overrides = $this->overridesFor($consumer, $cacheability);
@@ -87,13 +93,18 @@ final readonly class SettingsResolver {
    *   Keys never exposed, as "object:path" strings.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
    *   Collects the cache tags and contexts of everything that is read.
+   * @param string|null $theme
+   *   The theme whose settings to add, when they are included. Defaults to
+   *   the site's active theme.
    *
    * @return array
    *   Global settings keyed by config object name, then by key.
    */
-  public function globals(array $objects, bool $include_theme, array $excluded_keys, CacheableMetadata $cacheability): array {
+  public function globals(array $objects, bool $include_theme, array $excluded_keys, CacheableMetadata $cacheability, ?string $theme = NULL): array {
     if ($include_theme) {
-      $objects[] = $this->themeSettingsReader->activeThemeConfigName($cacheability);
+      $objects[] = ($theme !== NULL && $theme !== '')
+        ? $theme . '.settings'
+        : $this->themeSettingsReader->activeThemeConfigName($cacheability);
     }
     $objects = array_values(array_unique(array_filter($objects)));
 

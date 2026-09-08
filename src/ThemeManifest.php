@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\decoupled_settings;
 
+use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Extension\ThemeHandlerInterface;
@@ -24,6 +25,11 @@ use Drupal\Core\Extension\ThemeHandlerInterface;
  * consumer, so it is not merged with the per-consumer overrides.
  */
 final readonly class ThemeManifest {
+
+  /**
+   * The name of the theme field on the consumer entity.
+   */
+  public const string THEME_FIELD = 'decoupled_settings_theme';
 
   /**
    * Constructs the manifest builder.
@@ -48,20 +54,22 @@ final readonly class ThemeManifest {
    * The exposure decision lives here rather than in the transport, so it is
    * decided once no matter how many transports there are.
    *
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer to describe the theme for, or NULL for the site default.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
    *   Collects the cache tags of everything that is read.
    *
    * @return array|null
    *   The manifest, or NULL when it is not exposed.
    */
-  public function forResponse(CacheableMetadata $cacheability): ?array {
+  public function forResponse(?ConsumerInterface $consumer, CacheableMetadata $cacheability): ?array {
     $settings = $this->configFactory->get('decoupled_settings.settings');
     $cacheability->addCacheableDependency($settings);
     if (!$settings->get('expose_theme_manifest')) {
       return NULL;
     }
 
-    return $this->build($cacheability) ?: NULL;
+    return $this->build($cacheability, $consumer) ?: NULL;
   }
 
   /**
@@ -69,19 +77,18 @@ final readonly class ThemeManifest {
    *
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
    *   Collects the cache tags of everything that is read.
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer whose theme to describe, or NULL for the site default.
    *
    * @return array
-   *   The manifest. Empty if the default theme is not installed.
+   *   The manifest. Empty if the theme is not installed.
    */
-  public function build(CacheableMetadata $cacheability): array {
-    $system_theme = $this->configFactory->get('system.theme');
-    $cacheability->addCacheableDependency($system_theme);
-
+  public function build(CacheableMetadata $cacheability, ?ConsumerInterface $consumer = NULL): array {
     // A theme is added or removed by installing it, which rewrites
     // core.extension. The .info.yml itself only changes with the code.
     $cacheability->addCacheTags(['config:core.extension']);
 
-    $default = (string) ($system_theme->get('default') ?? '');
+    $default = $this->themeFor($consumer, $cacheability);
     $info = $this->themeInfo($default);
     if ($info === NULL) {
       return [];
@@ -92,8 +99,10 @@ final readonly class ThemeManifest {
     return [
       'default' => $default,
       // The admin theme is named, not read. Its settings are exposed only
-      // if an administrator lists the object explicitly.
-      'admin' => (string) ($system_theme->get('admin') ?? '') ?: NULL,
+      // if an administrator lists the object explicitly. It is the site's
+      // admin theme in every case: a consumer chooses what it renders as,
+      // and nothing renders Drupal's admin UI for a consumer.
+      'admin' => (string) ($this->configFactory->get('system.theme')->get('admin') ?? '') ?: NULL,
       // The config object the theme's own settings are read from. A client
       // reads the settings group under this name instead of guessing which
       // group belongs to the theme. Naming it does not expose it: the group
@@ -111,6 +120,38 @@ final readonly class ThemeManifest {
       'regions_hidden' => array_values($info['regions_hidden'] ?? []),
       'breakpoints' => $this->breakpoints($default),
     ];
+  }
+
+  /**
+   * Resolves the theme a consumer renders as.
+   *
+   * A consumer that names no theme follows the site default, which is the
+   * same sparse rule the setting overrides use: storing nothing means
+   * following the site.
+   *
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer, or NULL for the site default.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   *
+   * @return string
+   *   The theme machine name, which may be empty on a broken site.
+   */
+  public function themeFor(?ConsumerInterface $consumer, CacheableMetadata $cacheability): string {
+    if ($consumer instanceof ConsumerInterface && $consumer->hasField(self::THEME_FIELD)) {
+      $cacheability->addCacheableDependency($consumer);
+      $chosen = (string) ($consumer->get(self::THEME_FIELD)->value ?? '');
+      // An uninstalled theme has no regions or settings to read, so it is
+      // treated as no choice at all rather than as a broken response.
+      if ($chosen !== '' && $this->themeInfo($chosen) !== NULL) {
+        return $chosen;
+      }
+    }
+
+    $system_theme = $this->configFactory->get('system.theme');
+    $cacheability->addCacheableDependency($system_theme);
+
+    return (string) ($system_theme->get('default') ?? '');
   }
 
   /**

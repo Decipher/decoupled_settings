@@ -9,6 +9,13 @@ and this project adheres to
 ## Unreleased
 
 ### Added
+- A consumer can select the theme it renders as, on its own edit form. The
+  theme decides which regions and which theme settings that consumer reads,
+  so two consumers on different themes read different structures from one
+  site. Block layout in Drupal is partitioned by theme and by nothing else,
+  which is what makes this the unit that lets block configuration drive a
+  specific frontend. A consumer that selects nothing follows the site
+  default, the same sparse rule the setting overrides use.
 - The active theme's structure is available as a `theme` attribute on the
   response: the theme and admin theme names, the config object its settings
   are read from, its regions as machine name to label in declared order, the
