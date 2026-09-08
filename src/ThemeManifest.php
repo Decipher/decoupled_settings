@@ -43,6 +43,28 @@ final readonly class ThemeManifest {
   ) {}
 
   /**
+   * Builds the manifest a response carries, if the site exposes one.
+   *
+   * The exposure decision lives here rather than in the transport, so it is
+   * decided once no matter how many transports there are.
+   *
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   *
+   * @return array|null
+   *   The manifest, or NULL when it is not exposed.
+   */
+  public function forResponse(CacheableMetadata $cacheability): ?array {
+    $settings = $this->configFactory->get('decoupled_settings.settings');
+    $cacheability->addCacheableDependency($settings);
+    if (!$settings->get('expose_theme_manifest')) {
+      return NULL;
+    }
+
+    return $this->build($cacheability) ?: NULL;
+  }
+
+  /**
    * Builds the manifest for the site's active theme.
    *
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheability

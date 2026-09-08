@@ -174,6 +174,65 @@ class ThemeManifestTest extends KernelTestBase {
   }
 
   /**
+   * A site with no default theme recorded gives nothing, and does not throw.
+   */
+  public function testNoDefaultThemeGivesNothing(): void {
+    $this->config('system.theme')->set('default', '')->save();
+
+    $this->assertSame([], $this->manifest->build(new CacheableMetadata()));
+  }
+
+  /**
+   * A response carries no manifest until the site exposes one.
+   */
+  public function testResponseCarriesNothingWhenNotExposed(): void {
+    $this->assertNull($this->manifest->forResponse(new CacheableMetadata()));
+  }
+
+  /**
+   * Once exposed, a response carries the manifest.
+   */
+  public function testResponseCarriesTheManifestWhenExposed(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+
+    $manifest = $this->manifest->forResponse(new CacheableMetadata());
+
+    $this->assertSame('stark', $manifest['default']);
+  }
+
+  /**
+   * An exposed manifest for a broken theme is NULL, not an empty array.
+   *
+   * A client reading the attribute gets one answer for "no manifest", however
+   * it came about.
+   */
+  public function testResponseIsNullWhenTheThemeIsUninstalled(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+    $this->config('system.theme')->set('default', 'no_such_theme')->save();
+
+    $this->assertNull($this->manifest->forResponse(new CacheableMetadata()));
+  }
+
+  /**
+   * The exposure flag is a cacheable dependency of the response.
+   *
+   * Without it, switching the flag on would not invalidate a cached response.
+   */
+  public function testTheExposureFlagIsCacheable(): void {
+    $cacheability = new CacheableMetadata();
+    $this->manifest->forResponse($cacheability);
+
+    $this->assertContains(
+      'config:decoupled_settings.settings',
+      $cacheability->getCacheTags()
+    );
+  }
+
+  /**
    * The manifest carries the cache tags that make it change when it should.
    */
   public function testCacheabilityCoversTheThemeSelection(): void {
