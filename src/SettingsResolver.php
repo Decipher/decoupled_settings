@@ -178,25 +178,55 @@ final readonly class SettingsResolver {
   }
 
   /**
-   * Removes every key that the typed config schema does not declare.
+   * Tells whether an object has a schema that bounds its keys.
    *
-   * A key that a theme or a module never documented does not appear. This is
-   * what removes the need for a key list inside each exposed object.
+   * An object's own schema bounds it. So does core's theme_settings type,
+   * for a theme's settings: a theme does not have to ship a schema for
+   * them, and a bare decoupled-only theme usually does not, but core
+   * resolves every theme's settings through that shape. An object with
+   * neither has nothing to bound its keys, so it exposes nothing.
+   */
+  public function isSchemaBounded(string $name): bool {
+    return $this->typedConfigManager->hasConfigSchema($name)
+      || $this->themeSettingsReader->isThemeSettings($name);
+  }
+
+  /**
+   * Keeps only the keys the object's bounding schema declares.
    */
   private function filterBySchema(string $name, array $data): array {
-    if (!$this->typedConfigManager->hasConfigSchema($name)) {
-      // With no schema there is nothing to bound the keys, so expose nothing.
-      return [];
+    $element = $this->schemaElement($name, $data);
+
+    return $element instanceof ArrayElement ? $this->filterElement($element, $data) : [];
+  }
+
+  /**
+   * Builds the typed config element that bounds one object's keys.
+   *
+   * Built from the given data, not the stored object: for theme settings
+   * the data is core's merged result, which the stored object never holds.
+   *
+   * @return \Drupal\Core\Config\Schema\ArrayElement|null
+   *   The element, or NULL when nothing bounds the object.
+   */
+  private function schemaElement(string $name, array $data): ?ArrayElement {
+    if (!$this->isSchemaBounded($name)) {
+      return NULL;
     }
 
-    // Built from the given data, not the stored object: for theme settings
-    // the data is core's merged result, which the stored object never holds.
-    $element = $this->typedConfigManager->createFromNameAndData($name, $data);
-    if (!$element instanceof ArrayElement) {
-      return [];
+    if ($this->typedConfigManager->hasConfigSchema($name)) {
+      $element = $this->typedConfigManager->createFromNameAndData($name, $data);
+    }
+    else {
+      // A theme's settings with no schema of their own. Core's shape for
+      // every theme's settings bounds them, and the element keeps the
+      // object's own name.
+      $type = $this->typedConfigManager->getDefinition('theme_settings');
+      $definition = $this->typedConfigManager->buildDataDefinition($type, $data, $name);
+      $element = $this->typedConfigManager->create($definition, $data, $name);
     }
 
-    return $this->filterElement($element, $data);
+    return $element instanceof ArrayElement ? $element : NULL;
   }
 
   /**

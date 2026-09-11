@@ -28,6 +28,14 @@ and this project adheres to
   theme, or the site default when the consumer selects none, and is not
   overridable key by key the way a setting is.
 
+### Fixed
+- A theme that ships no schema for its settings, as a bare decoupled-only
+  theme usually does, no longer loses them. Its settings are bounded by
+  core's `theme_settings` type, so its logo, favicon and feature toggles are
+  exposed and keys of its own still are not. Before, the whole group was
+  dropped without a word, and with a consumer on that theme the manifest
+  named a settings object the payload did not carry.
+
 ## 1.0.0-beta2 (2026-08-26)
 
 ### Security

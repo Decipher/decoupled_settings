@@ -221,6 +221,12 @@ obvious branding ones. A key is absent for one of three reasons.
 | The object's typed config schema does not declare the key | Nothing here. Undeclared keys are dropped rather than guessed at |
 | The key is on the exclusion list | Remove it from the list |
 
+A theme that ships no schema for its settings, as a bare decoupled-only
+theme usually does, is bounded by core's `theme_settings` type instead. Its
+logo, favicon and feature toggles are exposed, and keys of its own are not.
+To expose those, give the theme a schema for `<theme>.settings` with
+`type: theme_settings` and map the extra keys under it, as Olivero does.
+
 The live preview on the settings form shows the current answer for every
 key, so check there before changing anything.
 

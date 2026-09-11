@@ -203,7 +203,9 @@ class SettingsForm extends ConfigFormBase {
    * JSON:API can already serve them. This module exists for the simple
    * config that core JSON:API cannot reach. An object with no schema is
    * labelled rather than hidden, so choosing it is an informed act instead
-   * of a mystery.
+   * of a mystery. A theme's settings with no schema are labelled too:
+   * core's theme settings shape bounds them, so they expose that and no
+   * more.
    */
   protected function availableObjects(array $exposed): array {
     $typed = $this->typedConfigManager();
@@ -221,8 +223,13 @@ class SettingsForm extends ConfigFormBase {
       }
       $group = explode('.', $name)[0];
       $label = $name;
-      if (!$typed->hasConfigSchema($name)) {
+      // The resolver owns the rule for what bounds an object, so the label
+      // cannot drift from what the endpoint actually serves.
+      if (!$this->resolver->isSchemaBounded($name)) {
         $label .= ' (' . $this->t('no schema, exposes nothing') . ')';
+      }
+      elseif (!$typed->hasConfigSchema($name)) {
+        $label .= ' (' . $this->t('no schema, core theme settings only') . ')';
       }
       $options[$group][$name] = $label;
     }
