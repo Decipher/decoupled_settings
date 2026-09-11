@@ -6,6 +6,7 @@ namespace Drupal\Tests\decoupled_settings\Functional;
 
 use Drupal\consumers\Entity\Consumer;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
 use Behat\Mink\Driver\BrowserKitDriver;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\user\Entity\Role;
@@ -107,6 +108,93 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
     $this->drupalGet('/jsonapi/decoupled/settings');
     $this->assertSession()->statusCodeEquals(403);
     $this->assertSession()->pageTextNotContains('Global Site');
+  }
+
+  /**
+   * A consumer's theme choice changes both the structure and the settings.
+   *
+   * The two move together on purpose. The manifest's settings_object names
+   * the group a client should read, so delivering another theme's settings
+   * under a different key would be a lie the client cannot detect.
+   */
+  public function testConsumerThemeChangesTheStructureAndTheSettings(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+    Consumer::create([
+      'client_id' => 'consumer_claro',
+      'label' => 'Consumer on Claro',
+      ThemeManifest::THEME_FIELD => 'claro',
+    ])->save();
+
+    $attributes = $this->fetch('consumerId=consumer_claro')['data']['attributes'];
+
+    $this->assertSame('claro', $attributes['theme']['default']);
+    $this->assertSame('claro.settings', $attributes['theme']['settings_object']);
+    $this->assertArrayHasKey('claro.settings', $attributes['settings']);
+    $this->assertArrayNotHasKey('stark.settings', $attributes['settings']);
+
+    // A consumer that made no choice is unaffected.
+    $other = $this->fetch('consumerId=consumer_b')['data']['attributes'];
+    $this->assertNotSame('claro', $other['theme']['default']);
+  }
+
+  /**
+   * The theme manifest is absent until a site chooses to expose it.
+   *
+   * The flag ships off, so an existing site that updates does not silently
+   * start sending its theme structure.
+   */
+  public function testThemeManifestIsAbsentByDefault(): void {
+    $this->grantAnonymousRead();
+
+    $document = $this->fetch();
+
+    $this->assertNull($document['data']['attributes']['theme']);
+  }
+
+  /**
+   * Once exposed, the manifest names the theme and lists its regions.
+   */
+  public function testThemeManifestListsRegions(): void {
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+
+    $theme = $this->fetch()['data']['attributes']['theme'];
+
+    $default = $this->config('system.theme')->get('default');
+    $this->assertSame($default, $theme['default']);
+    $this->assertSame($default . '.settings', $theme['settings_object']);
+    $this->assertNotEmpty($theme['regions']);
+    $this->assertArrayHasKey('content', $theme['regions']);
+  }
+
+  /**
+   * Consumers that choose no theme read the same structure.
+   *
+   * A consumer can select a theme, but neither of these does, so both follow
+   * the site and receive one identical structure even though their settings
+   * differ.
+   */
+  public function testThemeManifestIsTheSameForEveryConsumer(): void {
+    $this->grantAnonymousRead();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_manifest', TRUE)
+      ->save();
+
+    $a = $this->fetch('consumerId=consumer_a')['data']['attributes'];
+    $b = $this->fetch('consumerId=consumer_b')['data']['attributes'];
+
+    $this->assertNotSame(
+      $a['settings']['system.site']['name'],
+      $b['settings']['system.site']['name'],
+      'The two consumers do differ, so the comparison below means something.'
+    );
+    $this->assertSame($a['theme'], $b['theme']);
   }
 
   /**

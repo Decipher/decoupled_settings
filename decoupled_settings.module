@@ -15,6 +15,7 @@ use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\decoupled_settings\ThemeManifest;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\decoupled_settings\SettingsResolver;
 
@@ -47,9 +48,39 @@ function decoupled_settings_entity_base_field_info(EntityTypeInterface $entity_t
       // column without a null guard, so the column must never be NULL.
       ->setDefaultValue([[]])
       ->setRevisionable(TRUE);
+
+    // A plain string rather than list_string: the allowed values are the
+    // installed themes, which change without a schema update, and a
+    // list_string would add a dependency on the options module to store one
+    // machine name. The consumer form turns it into a select.
+    $fields[ThemeManifest::THEME_FIELD] = BaseFieldDefinition::create('string')
+      ->setLabel(t('Theme'))
+      ->setDescription(t('The theme this consumer renders as. Its regions and settings are what this consumer reads. Leave empty to follow the site default.'))
+      ->setRevisionable(TRUE)
+      ->setDisplayOptions('form', ['type' => 'string_textfield', 'weight' => 90])
+      ->setDisplayConfigurable('form', TRUE);
   }
 
   return $fields;
+}
+
+/**
+ * Allowed values callback for the consumer theme field.
+ *
+ * Lists the installed themes. A theme has to be installed for its regions and
+ * settings to exist at all, so an uninstalled one is not offerable.
+ *
+ * @return array
+ *   Theme machine name to human name.
+ */
+function decoupled_settings_theme_options(): array {
+  $options = [];
+  foreach (\Drupal::service('theme_handler')->listInfo() as $name => $theme) {
+    $options[$name] = $theme->info['name'] ?? $name;
+  }
+  asort($options);
+
+  return $options;
 }
 
 /**
@@ -124,6 +155,17 @@ function decoupled_settings_form_consumer_form_alter(array &$form, FormStateInte
   if ($consumer->hasField(SettingsResolver::OVERRIDE_FIELD)) {
     $field = $consumer->get(SettingsResolver::OVERRIDE_FIELD);
     $count = $field->isEmpty() ? 0 : count((array) $field->first()->getValue());
+  }
+
+  // The stored value is a machine name, so offer the installed themes
+  // rather than a free-text box that can name a theme with no regions.
+  $theme_field = ThemeManifest::THEME_FIELD;
+  if (isset($form[$theme_field]['widget'][0]['value'])) {
+    $form[$theme_field]['widget'][0]['value']['#type'] = 'select';
+    $form[$theme_field]['widget'][0]['value']['#options'] = decoupled_settings_theme_options();
+    $form[$theme_field]['widget'][0]['value']['#empty_option'] = t('- Follow the site default -');
+    $form[$theme_field]['widget'][0]['value']['#empty_value'] = '';
+    unset($form[$theme_field]['widget'][0]['value']['#size']);
   }
 
   $form['decoupled_settings'] = [
