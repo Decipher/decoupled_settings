@@ -323,6 +323,60 @@ class SettingsResolverTest extends KernelTestBase {
   }
 
   /**
+   * A theme with no settings schema still exposes core's theme settings.
+   *
+   * A theme does not have to ship a schema for its settings, and a bare
+   * decoupled-only theme, the kind a consumer selects, usually does not.
+   * Core resolves every theme's settings through the theme_settings type,
+   * so that type bounds a theme that declares nothing of its own. Without
+   * it, the manifest named a settings object the payload did not carry.
+   */
+  public function testThemeWithoutSchemaExposesCoreThemeSettings(): void {
+    $this->useBareTheme();
+
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+
+    $this->assertArrayHasKey('decoupled_settings_bare_theme.settings', $resolved);
+    $settings = $resolved['decoupled_settings_bare_theme.settings'];
+    $this->assertArrayHasKey('url', $settings['favicon']);
+    $this->assertArrayHasKey('logo', $settings);
+  }
+
+  /**
+   * The core shape bounds a schema-less theme: its own keys stay out.
+   *
+   * The fallback is a schema, not the absence of one. A key the theme stores
+   * but the theme_settings type does not declare is dropped, exactly as it
+   * would be for a theme with a schema of its own.
+   */
+  public function testThemeWithoutSchemaDropsUndeclaredKeys(): void {
+    $this->useBareTheme();
+    $this->container->get('config.storage')
+      ->write('decoupled_settings_bare_theme.settings', ['brand_accent' => '#ff0000']);
+
+    $resolved = $this->resolver->resolve(NULL, new CacheableMetadata());
+
+    $settings = $resolved['decoupled_settings_bare_theme.settings'];
+    $this->assertArrayNotHasKey('brand_accent', $settings);
+    $this->assertArrayHasKey('favicon', $settings);
+  }
+
+  /**
+   * Makes the schema-less test theme active, with theme settings exposed.
+   */
+  protected function useBareTheme(): void {
+    $this->container->get('theme_installer')->install(['decoupled_settings_bare_theme']);
+    $this->config('system.theme')->set('default', 'decoupled_settings_bare_theme')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    // Installing a theme rebuilds the container. The resolver fetched in
+    // setUp() still holds services from before the theme existed, so it
+    // cannot see it. Fetch the resolver again.
+    $this->resolver = $this->container->get('decoupled_settings.resolver');
+  }
+
+  /**
    * The install hook backfills consumers that predate the module.
    *
    * A direct database check on purpose: the point of the backfill is the

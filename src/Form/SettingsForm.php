@@ -136,6 +136,13 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => (bool) $config->get('expose_theme_settings'),
     ];
 
+    $form['expose_theme_manifest'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Expose the active theme structure'),
+      '#description' => $this->t('Adds the theme regions, their labels and declared order, the hidden regions, the names of the default and admin themes, and the declared breakpoints. A frontend that lays out blocks by region reads them from here instead of hardcoding them. It describes the theme each consumer selects, or the site default when a consumer selects none, and it cannot be overridden setting by setting. The admin theme is named, not read: to expose its settings, add them to the list above by name.'),
+      '#default_value' => (bool) $config->get('expose_theme_manifest'),
+    ];
+
     $form['excluded_keys'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Excluded settings'),
@@ -196,7 +203,9 @@ class SettingsForm extends ConfigFormBase {
    * JSON:API can already serve them. This module exists for the simple
    * config that core JSON:API cannot reach. An object with no schema is
    * labelled rather than hidden, so choosing it is an informed act instead
-   * of a mystery.
+   * of a mystery. A theme's settings with no schema are labelled too:
+   * core's theme settings shape bounds them, so they expose that and no
+   * more.
    */
   protected function availableObjects(array $exposed): array {
     $typed = $this->typedConfigManager();
@@ -214,8 +223,13 @@ class SettingsForm extends ConfigFormBase {
       }
       $group = explode('.', $name)[0];
       $label = $name;
-      if (!$typed->hasConfigSchema($name)) {
+      // The resolver owns the rule for what bounds an object, so the label
+      // cannot drift from what the endpoint actually serves.
+      if (!$this->resolver->isSchemaBounded($name)) {
         $label .= ' (' . $this->t('no schema, exposes nothing') . ')';
+      }
+      elseif (!$typed->hasConfigSchema($name)) {
+        $label .= ' (' . $this->t('no schema, core theme settings only') . ')';
       }
       $options[$group][$name] = $label;
     }
@@ -321,6 +335,7 @@ class SettingsForm extends ConfigFormBase {
     $this->config('decoupled_settings.settings')
       ->set('exposed_objects', $form_state->get('exposed_working') ?: [])
       ->set('expose_theme_settings', (bool) $form_state->getValue('expose_theme_settings'))
+      ->set('expose_theme_manifest', (bool) $form_state->getValue('expose_theme_manifest'))
       ->set('excluded_keys', $this->lines($form_state->getValue('excluded_keys')))
       ->save();
 
