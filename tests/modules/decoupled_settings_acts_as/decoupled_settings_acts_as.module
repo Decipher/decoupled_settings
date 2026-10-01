@@ -1,0 +1,32 @@
+<?php
+
+/**
+ * @file
+ * Adds the field Simple OAuth puts on a consumer.
+ */
+
+declare(strict_types=1);
+
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Field\BaseFieldDefinition;
+
+/**
+ * Implements hook_entity_base_field_info().
+ *
+ * Simple OAuth adds user_id to the consumer entity: the account a token
+ * issued for that consumer authenticates as. Recreating just that field lets
+ * the access rules be tested without pulling in Simple OAuth and an OAuth
+ * server.
+ */
+function decoupled_settings_acts_as_entity_base_field_info(EntityTypeInterface $entity_type): array {
+  $fields = [];
+
+  if ($entity_type->id() === 'consumer') {
+    $fields['user_id'] = BaseFieldDefinition::create('entity_reference')
+      ->setLabel(t('User'))
+      ->setDescription(t('The account a token for this consumer acts as.'))
+      ->setSetting('target_type', 'user');
+  }
+
+  return $fields;
+}

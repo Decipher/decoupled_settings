@@ -9,6 +9,7 @@ use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Cache\CacheableResponseInterface;
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\decoupled_settings\ConsumerAccess;
 use Drupal\decoupled_settings\SettingsResolver;
 use Drupal\jsonapi\JsonApiResource\LinkCollection;
 use Drupal\jsonapi\JsonApiResource\ResourceObject;
@@ -33,6 +34,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
   public function __construct(
     private readonly SettingsResolver $settingsResolver,
     private readonly EntityTypeManagerInterface $entityTypeManager,
+    private readonly ConsumerAccess $consumerAccess,
   ) {}
 
   /**
@@ -42,6 +44,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     return new self(
       $container->get('decoupled_settings.resolver'),
       $container->get('entity_type.manager'),
+      $container->get('decoupled_settings.consumer_access'),
     );
   }
 
@@ -67,7 +70,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       'headers:X-Consumer-ID',
     ]);
 
-    $consumer = $this->consumerFor($request);
+    $consumer = $this->consumerFor($request, $cacheability);
     $resolved = $this->settingsResolver->resolve($consumer, $cacheability);
 
     $resource_type = reset($resource_types);
@@ -107,7 +110,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
    * against the consumers module behaves the same: the X-Consumer-ID header
    * first, then the consumerId query parameter.
    */
-  private function consumerFor(Request $request): ?ConsumerInterface {
+  private function consumerFor(Request $request, CacheableMetadata $cacheability): ?ConsumerInterface {
     $client_id = $request->headers->get('X-Consumer-ID')
       ?: $request->query->get('consumerId');
     if (!$client_id) {
@@ -117,8 +120,14 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     $consumers = $this->entityTypeManager->getStorage('consumer')
       ->loadByProperties(['client_id' => $client_id]);
     $consumer = reset($consumers);
+    if (!$consumer instanceof ConsumerInterface) {
+      return NULL;
+    }
 
-    return $consumer instanceof ConsumerInterface ? $consumer : NULL;
+    // A consumer the caller may not read reads as one that does not exist:
+    // the global values, with no consumer named. A 403 would tell a caller
+    // which client IDs are real.
+    return $this->consumerAccess->mayRead($consumer, $cacheability) ? $consumer : NULL;
   }
 
   /**
