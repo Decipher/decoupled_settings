@@ -39,6 +39,7 @@ final readonly class SettingsResolver {
     private ThemeSettingsReader $themeSettingsReader,
     private SettingsMerger $settingsMerger,
     private ModuleHandlerInterface $moduleHandler,
+    private ThemeManifest $themeManifest,
   ) {}
 
   /**
@@ -56,11 +57,16 @@ final readonly class SettingsResolver {
     $settings = $this->configFactory->get('decoupled_settings.settings');
     $cacheability->addCacheableDependency($settings);
 
+    // The theme settings a consumer reads are its own theme's, so the group
+    // the manifest names in settings_object is the group that is delivered.
+    // Naming one theme and shipping another's settings would be a lie the
+    // client cannot detect.
     $globals = $this->globals(
       $settings->get('exposed_objects') ?: [],
       (bool) $settings->get('expose_theme_settings'),
       $settings->get('excluded_keys') ?: [],
-      $cacheability
+      $cacheability,
+      $this->themeManifest->themeFor($consumer, $cacheability)
     );
 
     $overrides = $this->overridesFor($consumer, $cacheability);
@@ -87,13 +93,18 @@ final readonly class SettingsResolver {
    *   Keys never exposed, as "object:path" strings.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
    *   Collects the cache tags and contexts of everything that is read.
+   * @param string|null $theme
+   *   The theme whose settings to add, when they are included. Defaults to
+   *   the site's active theme.
    *
    * @return array
    *   Global settings keyed by config object name, then by key.
    */
-  public function globals(array $objects, bool $include_theme, array $excluded_keys, CacheableMetadata $cacheability): array {
+  public function globals(array $objects, bool $include_theme, array $excluded_keys, CacheableMetadata $cacheability, ?string $theme = NULL): array {
     if ($include_theme) {
-      $objects[] = $this->themeSettingsReader->activeThemeConfigName($cacheability);
+      $objects[] = ($theme !== NULL && $theme !== '')
+        ? $theme . '.settings'
+        : $this->themeSettingsReader->activeThemeConfigName($cacheability);
     }
     $objects = array_values(array_unique(array_filter($objects)));
 
@@ -167,25 +178,55 @@ final readonly class SettingsResolver {
   }
 
   /**
-   * Removes every key that the typed config schema does not declare.
+   * Tells whether an object has a schema that bounds its keys.
    *
-   * A key that a theme or a module never documented does not appear. This is
-   * what removes the need for a key list inside each exposed object.
+   * An object's own schema bounds it. So does core's theme_settings type,
+   * for a theme's settings: a theme does not have to ship a schema for
+   * them, and a bare decoupled-only theme usually does not, but core
+   * resolves every theme's settings through that shape. An object with
+   * neither has nothing to bound its keys, so it exposes nothing.
+   */
+  public function isSchemaBounded(string $name): bool {
+    return $this->typedConfigManager->hasConfigSchema($name)
+      || $this->themeSettingsReader->isThemeSettings($name);
+  }
+
+  /**
+   * Keeps only the keys the object's bounding schema declares.
    */
   private function filterBySchema(string $name, array $data): array {
-    if (!$this->typedConfigManager->hasConfigSchema($name)) {
-      // With no schema there is nothing to bound the keys, so expose nothing.
-      return [];
+    $element = $this->schemaElement($name, $data);
+
+    return $element instanceof ArrayElement ? $this->filterElement($element, $data) : [];
+  }
+
+  /**
+   * Builds the typed config element that bounds one object's keys.
+   *
+   * Built from the given data, not the stored object: for theme settings
+   * the data is core's merged result, which the stored object never holds.
+   *
+   * @return \Drupal\Core\Config\Schema\ArrayElement|null
+   *   The element, or NULL when nothing bounds the object.
+   */
+  private function schemaElement(string $name, array $data): ?ArrayElement {
+    if (!$this->isSchemaBounded($name)) {
+      return NULL;
     }
 
-    // Built from the given data, not the stored object: for theme settings
-    // the data is core's merged result, which the stored object never holds.
-    $element = $this->typedConfigManager->createFromNameAndData($name, $data);
-    if (!$element instanceof ArrayElement) {
-      return [];
+    if ($this->typedConfigManager->hasConfigSchema($name)) {
+      $element = $this->typedConfigManager->createFromNameAndData($name, $data);
+    }
+    else {
+      // A theme's settings with no schema of their own. Core's shape for
+      // every theme's settings bounds them, and the element keeps the
+      // object's own name.
+      $type = $this->typedConfigManager->getDefinition('theme_settings');
+      $definition = $this->typedConfigManager->buildDataDefinition($type, $data, $name);
+      $element = $this->typedConfigManager->create($definition, $data, $name);
     }
 
-    return $this->filterElement($element, $data);
+    return $element instanceof ArrayElement ? $element : NULL;
   }
 
   /**

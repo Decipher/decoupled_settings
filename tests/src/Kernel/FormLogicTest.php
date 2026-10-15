@@ -99,6 +99,37 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * The add list says what a schema-less object would actually expose.
+   *
+   * A theme's settings with no schema are bounded by core's theme settings
+   * shape, so they expose that. Any other object with no schema exposes
+   * nothing. The label asks the resolver, so it cannot drift from what the
+   * endpoint serves.
+   */
+  public function testAddListLabelsSchemaLessObjectsByWhatTheyExpose(): void {
+    $this->container->get('theme_installer')->install(['decoupled_settings_bare_theme']);
+    $storage = $this->container->get('config.storage');
+    $storage->write('decoupled_settings_bare_theme.settings', ['brand_accent' => '#ff0000']);
+    $storage->write('decoupled_settings.no_such_schema', ['secret' => 'value']);
+
+    $form_state = new FormState();
+    $form = $this->container->get('form_builder')->buildForm(SettingsForm::class, $form_state);
+
+    $flat = [];
+    foreach ($form['exposed']['objects']['_new']['name']['data']['add_object']['#options'] as $group) {
+      $flat += is_array($group) ? $group : [];
+    }
+    $this->assertSame(
+      'decoupled_settings_bare_theme.settings (no schema, core theme settings only)',
+      (string) $flat['decoupled_settings_bare_theme.settings']
+    );
+    $this->assertSame(
+      'decoupled_settings.no_such_schema (no schema, exposes nothing)',
+      (string) $flat['decoupled_settings.no_such_schema']
+    );
+  }
+
+  /**
    * The settings form rejects an exclusion that is not object:path.
    */
   public function testSettingsFormRejectsMalformedExclusion(): void {

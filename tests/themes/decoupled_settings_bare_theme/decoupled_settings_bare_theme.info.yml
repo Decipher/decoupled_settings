@@ -1,0 +1,7 @@
+name: 'Decoupled Settings bare theme'
+type: theme
+description: 'A decoupled-only theme with no config schema, the kind a consumer selects. Used by tests.'
+package: Testing
+version: VERSION
+base theme: false
+hidden: true
