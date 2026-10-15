@@ -1,0 +1,7 @@
+name: 'Decoupled Settings acts-as test'
+type: module
+description: 'Adds the user_id field Simple OAuth puts on a consumer, so the acts-as branch can be tested without installing Simple OAuth.'
+package: Testing
+version: VERSION
+dependencies:
+  - consumers:consumers

@@ -139,4 +139,67 @@ class JsonApiSettingsResourceSimpleOauthTest extends BrowserTestBase {
     $this->assertSame('Partner Portal', $document['data']['attributes']['settings']['system.site']['name']);
   }
 
+  /**
+   * A token reads its own consumer, whatever the request asks for.
+   *
+   * Simple OAuth overwrites X-Consumer-ID from the token, and the header
+   * beats the query parameter, so a token holder naming another consumer
+   * reads its own rather than being refused. The access check never has to
+   * answer for this path, which is why the session-authenticated cases in
+   * JsonApiSettingsResourceTest carry the refusal contract.
+   */
+  public function testTokenReadsItsOwnConsumerWhateverIsNamed(): void {
+    Consumer::create([
+      'client_id' => 'other_app',
+      'label' => 'Other app',
+      SettingsResolver::OVERRIDE_FIELD => ['system.site:name' => 'Other Portal'],
+    ])->save();
+
+    $client = $this->container->get('http_client_factory')
+      ->fromOptions(['base_uri' => $this->baseUrl, 'http_errors' => FALSE]);
+    $response = $client->post(Url::fromRoute('oauth2_token.token')->toString(), [
+      'form_params' => [
+        'grant_type' => 'client_credentials',
+        'client_id' => 'partner_frontend',
+        'client_secret' => $this->clientSecret,
+        'scope' => 'frontend_app',
+      ],
+    ]);
+    $token = Json::decode((string) $response->getBody())['access_token'] ?? '';
+    $this->assertNotEmpty($token);
+
+    $own = $this->fetch(['Authorization' => 'Bearer ' . $token]);
+    $this->assertSame('partner_frontend', $own['data']['attributes']['consumer']);
+
+    // The same token, naming another consumer explicitly. The token wins.
+    $this->getSession()->restart();
+    $content = $this->drupalGet('/jsonapi/decoupled/settings', ['query' => ['consumerId' => 'other_app']], [
+      'Authorization' => 'Bearer ' . $token,
+    ]);
+    $other = Json::decode($content) ?? [];
+    // Assert the shape, not the absence of a value: an error document, or a
+    // body that does not decode, would satisfy a negative assertion while
+    // the branch this test exists for was broken.
+    $this->assertSession()->statusCodeEquals(200);
+    $this->assertArrayHasKey('data', $other, 'The response is a settings document, not an error.');
+    $this->assertSame('partner_frontend', $other['data']['attributes']['consumer']);
+    $this->assertSame('Partner Portal', $other['data']['attributes']['settings']['system.site']['name']);
+
+    // And the header, which is the channel the resource reads first. Simple
+    // OAuth sets it from the token during authentication, so a value the
+    // client supplied is replaced rather than honoured. Pinned here because
+    // nothing else in this repository can settle that, and the docblock
+    // above depends on it.
+    $this->getSession()->restart();
+    $spoofed = Json::decode($this->drupalGet('/jsonapi/decoupled/settings', [], [
+      'Authorization' => 'Bearer ' . $token,
+      'X-Consumer-ID' => 'other_app',
+    ])) ?? [];
+
+    $this->assertSession()->statusCodeEquals(200);
+    $this->assertArrayHasKey('data', $spoofed, 'The response is a settings document, not an error.');
+    $this->assertSame('partner_frontend', $spoofed['data']['attributes']['consumer']);
+    $this->assertSame('Partner Portal', $spoofed['data']['attributes']['settings']['system.site']['name']);
+  }
+
 }

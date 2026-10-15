@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\decoupled_settings\Functional;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\decoupled_settings\SettingsResolver;
 use Behat\Mink\Driver\BrowserKitDriver;
 use Drupal\Tests\BrowserTestBase;
@@ -71,6 +72,40 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * Creates an account with the given permissions and logs it in.
+   *
+   * Drupal 10 declares drupalCreateUser() as returning User or FALSE, so the
+   * failure is handled rather than passed on to drupalLogin().
+   *
+   * @param array $permissions
+   *   The permissions to grant the new account.
+   */
+  protected function loginWith(array $permissions): void {
+    $this->drupalLogin($this->asAccount($this->drupalCreateUser($permissions)));
+  }
+
+  /**
+   * Narrows a created account to an account.
+   *
+   * Drupal 10 declares drupalCreateUser() as returning User or FALSE, and
+   * Drupal 11 as returning UserInterface. Taking mixed here means the check
+   * is neither missing on one major nor redundant on the other.
+   *
+   * @param mixed $account
+   *   The value drupalCreateUser() returned.
+   *
+   * @return \Drupal\Core\Session\AccountInterface
+   *   The account.
+   */
+  protected function asAccount(mixed $account): AccountInterface {
+    if (!$account instanceof AccountInterface) {
+      throw new \RuntimeException('The test account could not be created.');
+    }
+
+    return $account;
+  }
+
+  /**
    * Grants the read permission to anonymous users.
    */
   protected function grantAnonymousRead(): void {
@@ -98,6 +133,22 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
     $content = $this->drupalGet('/jsonapi/decoupled/settings', $options, $headers);
 
     return json_decode($content, TRUE) ?? [];
+  }
+
+  /**
+   * Fetches the resource as whoever is logged in, keeping the session.
+   *
+   * The helper above restarts the session on purpose, which would log a
+   * test user out and turn an authenticated case into an anonymous one.
+   */
+  protected function fetchAsCurrentUser(string $query = ''): array {
+    $options = [];
+    if ($query !== '') {
+      parse_str($query, $params);
+      $options['query'] = $params;
+    }
+
+    return json_decode($this->drupalGet('/jsonapi/decoupled/settings', $options), TRUE) ?? [];
   }
 
   /**
@@ -207,6 +258,70 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
     $anonymous = $this->fetch();
 
     $this->assertSame('Global Site', $anonymous['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * An authenticated caller may not name a consumer that is not theirs.
+   *
+   * This is the case worth closing: under the posture the README recommends
+   * for protected values, every app holding the scope could read every
+   * other app's overrides by naming it.
+   */
+  public function testAuthenticatedCallerCannotNameAnotherConsumer(): void {
+    $this->grantAnonymousRead();
+    $this->loginWith(['read decoupled settings']);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertNull($document['data']['attributes']['consumer']);
+    $this->assertSame('Global Site', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * The permission names any consumer, without Consumers' permissions.
+   *
+   * An administrator gets one switch to reason about, rather than having
+   * to hand out consumer entity permissions to a reporting tool.
+   */
+  public function testReadAnyConsumerPermissionAllowsNaming(): void {
+    $this->grantAnonymousRead();
+    $this->loginWith([
+      'read decoupled settings',
+      'read any consumer decoupled settings',
+    ]);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * Consumers' own view access is what opens the door for everyone else.
+   */
+  public function testConsumerViewAccessAllowsNamingAnother(): void {
+    $this->grantAnonymousRead();
+    $this->loginWith([
+      'read decoupled settings',
+      'administer consumer entities',
+    ]);
+
+    $document = $this->fetchAsCurrentUser('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
+   * An anonymous caller still names any consumer, which is unchanged.
+   */
+  public function testAnonymousCallerStillNamesAnyConsumer(): void {
+    $this->grantAnonymousRead();
+
+    $document = $this->fetch('consumerId=consumer_a');
+
+    $this->assertSame('consumer_a', $document['data']['attributes']['consumer']);
+    $this->assertSame('Site A', $document['data']['attributes']['settings']['system.site']['name']);
   }
 
   /**
