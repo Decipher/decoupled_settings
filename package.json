@@ -1,19 +1,15 @@
 {
   "name": "@drupal/decoupled_settings",
   "version": "0.1.0",
-  "description": "Provides decoupled_settings functionality..",
+  "description": "Exposes allowlisted simple config over JSON:API, with global values and per-consumer overrides.",
   "license": "GPL-2.0-or-later",
   "contributors": [],
   "scripts": {
-    "lint-spell": "cspell --no-progress",
-    "build": "echo Would run build"
+    "lint-spell": "cspell --no-progress"
   },
   "engines": {
     "npm": ">=8.19.4",
     "node": ">=18.20.8"
-  },
-  "dependencies": {
-    "is-positive": "^3.1.0"
   },
   "devDependencies": {
     "cspell": "^8.19.4"
