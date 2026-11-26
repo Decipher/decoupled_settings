@@ -21,8 +21,9 @@ use Drupal\Core\Extension\ThemeHandlerInterface;
  * This class reads what Drupal records, and only that. It does not read
  * templates.
  *
- * The manifest is structure, not settings. It is the same for every
- * consumer, so it is not merged with the per-consumer overrides.
+ * The manifest is structure, not settings, so it is not merged with the
+ * per-consumer overrides. It describes the theme the consumer renders as,
+ * which is the site default unless the consumer selects its own.
  */
 final readonly class ThemeManifest {
 
@@ -122,8 +123,9 @@ final readonly class ThemeManifest {
       // this list is never empty and can name a region the theme does not
       // declare. It is passed through as recorded, not subtracted from the
       // regions above, because a client may have its own reason to render
-      // one.
-      'regions_hidden' => array_values($info['regions_hidden'] ?? []),
+      // one. Core appends the two without checking, so a theme that hides
+      // them itself would list each twice.
+      'regions_hidden' => array_values(array_unique($info['regions_hidden'] ?? [])),
       'breakpoints' => $this->breakpoints($default),
     ];
   }

@@ -130,6 +130,21 @@ class ThemeManifestTest extends KernelTestBase {
   }
 
   /**
+   * A theme that hides the core reserves itself lists each of them once.
+   *
+   * Core appends page_top and page_bottom without checking whether the theme
+   * already hides them, so a theme that lists them would report each twice.
+   */
+  public function testCoreReservesAreListedOnceWhenThemeHidesThem(): void {
+    $this->container->get('theme_installer')->install(['decoupled_settings_reserves_theme']);
+    $this->config('system.theme')->set('default', 'decoupled_settings_reserves_theme')->save();
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata());
+
+    $this->assertSame(['page_top', 'page_bottom'], $manifest['regions_hidden']);
+  }
+
+  /**
    * Hidden regions are reported beside the regions, never subtracted.
    *
    * A hidden region can be one the theme never declared, so a client cannot
