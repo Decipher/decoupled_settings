@@ -51,8 +51,13 @@ use Rector\TypeDeclaration\Rector\StmtsAwareInterface\DeclareStrictTypesRector;
 // The cache lives off the host mount: rector's embedded PHPStan renames its
 // nette.configurator cache file, which fails on the devpod bind mount.
 $cache_dir = sys_get_temp_dir() . '/rector_decoupled_settings';
-if (!is_dir($cache_dir)) {
-  mkdir($cache_dir, 0755, TRUE);
+// The option --clear-cache deletes the file cache directory, so the container
+// cache needs its own directory.
+$container_cache_dir = sys_get_temp_dir() . '/rector_decoupled_settings_container';
+foreach ([$cache_dir, $container_cache_dir] as $directory) {
+  if (!is_dir($directory)) {
+    mkdir($directory, 0755, TRUE);
+  }
 }
 
 return RectorConfig::configure()
@@ -119,11 +124,11 @@ return RectorConfig::configure()
   ])
   // Paths to the extension's source. Each top-level item of the extension is
   // symlinked individually into the build and Rector's finder does not follow
-  // symlinked directories, so the module children are matched directly (each is
-  // passed to the finder as its own root, which a symlinked root resolves).
+  // symlinked directories, so the extension's children are matched directly
+  // (each is passed to the finder as its own root, which a symlinked root
+  // resolves).
   ->withPaths([
     __DIR__ . '/web/modules/custom/*/*',
-    __DIR__ . '/web/themes/custom/*/*',
   ])
   // Configure Drupal autoloading.
   ->withAutoloadPaths((function (): array {
@@ -148,6 +153,6 @@ return RectorConfig::configure()
     'engine',
   ])
   // Cache configuration.
-  ->withCache(cacheDirectory: $cache_dir, containerCacheDirectory: $cache_dir)
+  ->withCache(cacheDirectory: $cache_dir, containerCacheDirectory: $container_cache_dir)
   // Import configuration.
   ->withImportNames(importNames: TRUE, importDocBlockNames: FALSE, importShortClasses: FALSE);

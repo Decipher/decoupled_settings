@@ -3,7 +3,6 @@
     <description>Custom PHPCS Standard, based on Drupal standards.</description>
 
     <file>web/modules/custom</file>
-    <file>web/themes/custom</file>
 
     <rule ref="Drupal"/>
     <rule ref="DrupalPractice"/>
@@ -40,5 +39,4 @@
         <exclude-pattern>*.TestCase\.php</exclude-pattern>
         <exclude-pattern>*.test</exclude-pattern>
     </rule>
-  <exclude-pattern>.*\/\.devtools\/.*</exclude-pattern>
 </ruleset>
