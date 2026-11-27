@@ -125,6 +125,10 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       ->loadByProperties(['client_id' => $client_id]);
     $consumer = reset($consumers);
     if (!$consumer instanceof ConsumerInterface) {
+      // The answer for an ID that matches nothing is cached per ID, so it
+      // ends when the consumer list changes: creating this consumer later
+      // must not leave the global answer in place.
+      $cacheability->addCacheTags($this->entityTypeManager->getDefinition('consumer')->getListCacheTags());
       return NULL;
     }
 
