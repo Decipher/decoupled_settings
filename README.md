@@ -145,9 +145,46 @@ a consumer receives, which is the exposure list's job.
 **Q: Why is the output wider than I expected?**
 
 **A:** Every key the schema declares for an exposed object is included
-unless it is excluded, and the active theme carries more settings than the
+unless it is excluded, and the active theme holds more settings than the
 obvious branding ones. Review the live preview on the settings form and
 extend the exclusion list to taste.
+
+**Q: Why can I not expose a config entity, such as a date format?**
+
+**A:** The exposure form lists simple config only, because core JSON:API
+serves config entities at their own endpoints with their own access rules.
+
+That answer has a known hole, and it is about access rather than coverage.
+A date format is the case to know about. To an unprivileged or anonymous
+client, `/jsonapi/date_format/date_format` returns each format's label and
+nothing else, so a frontend rendering a date the way the site does receives
+the names of the formats and nothing to format with. Reading
+`core.date_format.long` as config returns the `pattern`.
+
+Core is not withholding the field for lack of support. `date_format`
+declares `admin_permission: 'administer site configuration'`, and to a
+client holding it the same endpoint serves `pattern` along with everything
+else the entity exports. What an unprivileged client gets instead is a
+label-only resource, which JSON:API returns when `view` is denied but
+`view label` is allowed.
+
+Two things follow. Reaching that field over core JSON:API means granting a
+frontend site-administration permission, which is not a trade worth making
+for a date pattern. And the refusal is silent: same HTTP 200, no error, and
+none of the `meta.omitted` explanation that the fully-denied path gives, so
+asking for `pattern` through `fields[]` returns items with no attributes at
+all and no reason. A client cannot tell a withheld field from an empty one.
+
+Setting a config entity in `exposed_objects` by hand does resolve, so a
+check made that way suggests the form is broken. It is not, but the
+exclusion is under review for exactly this reason.
+
+**Q: Why does `system.maintenance:message` contain `@site`?**
+
+**A:** Core substitutes that placeholder when it renders the message, and
+this endpoint serves stored config rather than rendered output. A client
+rendering the string verbatim shows the placeholder. `system.site:name`
+travels in the same response, so a client can substitute it.
 
 **Q: Why is a setting missing from the output?**
 
@@ -157,7 +194,7 @@ Undeclared keys are dropped rather than guessed at.
 
 **Q: Can a module expose settings that are not config?**
 
-**A:** Yes. Implement `hook_decoupled_settings_global_alter()` to contribute a
+**A:** Yes. Use `hook_decoupled_settings_global_alter()` to contribute a
 group of computed values. A contributed setting is overridable per consumer,
 exactly like one read from config. See `decoupled_settings.api.php`.
 
