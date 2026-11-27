@@ -163,6 +163,40 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * The settings form lists the installed themes for consumers to select.
+   *
+   * Nothing is ticked by default, which offers every installed theme.
+   */
+  public function testSettingsFormOffersInstalledThemesToList(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+
+    $form_state = new FormState();
+    $form = $this->container->get('form_builder')->buildForm(SettingsForm::class, $form_state);
+
+    $this->assertSame('checkboxes', $form['selectable_themes']['#type']);
+    $this->assertSame(['claro' => 'Claro', 'stark' => 'Stark'], $form['selectable_themes']['#options']);
+    $this->assertSame([], $form['selectable_themes']['#default_value']);
+  }
+
+  /**
+   * Only the ticked themes are saved to the list.
+   */
+  public function testSettingsFormSavesSelectableThemes(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+
+    $form_state = new FormState();
+    $form_state->set('exposed_working', ['system.site']);
+    $form_state->setValues([
+      'selectable_themes' => ['claro' => 'claro'],
+      'excluded_keys' => '',
+    ]);
+    $this->container->get('form_builder')->submitForm(SettingsForm::class, $form_state);
+
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame(['claro'], $this->config('decoupled_settings.settings')->get('selectable_themes'));
+  }
+
+  /**
    * The override form lists each exposed setting with its inherited value.
    */
   public function testOverrideFormListsInheritedValues(): void {

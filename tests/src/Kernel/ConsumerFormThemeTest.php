@@ -100,6 +100,46 @@ class ConsumerFormThemeTest extends KernelTestBase {
   }
 
   /**
+   * A consumer's owner chooses its theme from the same select.
+   *
+   * Choosing the theme a consumer renders as is the consumer's own decision,
+   * so an owner who cannot administer this module still gets the select,
+   * not a free-text box.
+   */
+  public function testOwnerWithoutModulePermissionGetsTheSelect(): void {
+    $this->setUpCurrentUser([], ['update own consumer entities']);
+
+    $element = $this->themeElement();
+
+    $this->assertSame('select', $element['#type']);
+    $this->assertSame(['claro' => 'Claro', 'stark' => 'Stark'], $this->themeOptions($element));
+  }
+
+  /**
+   * The add form offers the select too.
+   */
+  public function testNewConsumerGetsTheSelect(): void {
+    $this->setUpCurrentUser([], ['administer consumer entities']);
+
+    $consumer = Consumer::create(['client_id' => 'new_app', 'label' => 'New app']);
+    $form = $this->container->get('entity.form_builder')->getForm($consumer, 'add');
+
+    $this->assertSame('select', $form[ThemeManifest::THEME_FIELD]['widget'][0]['value']['#type']);
+  }
+
+  /**
+   * Only the themes the site lists are offered, once it lists any.
+   */
+  public function testOnlyListedThemesAreOffered(): void {
+    $this->config('decoupled_settings.settings')->set('selectable_themes', ['stark'])->save();
+    $this->setUpCurrentUser([], ['update own consumer entities']);
+
+    $element = $this->themeElement();
+
+    $this->assertSame(['stark' => 'Stark'], $this->themeOptions($element));
+  }
+
+  /**
    * Returns the theme choices, without the empty one form processing adds.
    *
    * @param array $element
@@ -125,6 +165,7 @@ class ConsumerFormThemeTest extends KernelTestBase {
     $consumer = Consumer::create([
       'client_id' => 'form_app',
       'label' => 'Form app',
+      'owner_id' => $this->container->get('current_user')->id(),
     ]);
     $consumer->save();
 

@@ -77,6 +77,33 @@ class UpdateHooksTest extends KernelTestBase {
   }
 
   /**
+   * A beta2 site gets an empty list of selectable themes.
+   *
+   * Empty means every installed theme, which is what the theme field
+   * allowed before the list existed.
+   */
+  public function testSelectableThemesAreAddedEmpty(): void {
+    $this->config('decoupled_settings.settings')->clear('selectable_themes')->save();
+
+    $message = decoupled_settings_update_10004();
+
+    $this->assertSame([], $this->config('decoupled_settings.settings')->get('selectable_themes'));
+    $this->assertSame('Consumers can select any installed theme until the list on the settings form is narrowed.', $message);
+  }
+
+  /**
+   * A list that is already set is left as it is.
+   */
+  public function testSelectableThemesThatAreSetAreKept(): void {
+    $this->config('decoupled_settings.settings')->set('selectable_themes', ['stark'])->save();
+
+    $message = decoupled_settings_update_10004();
+
+    $this->assertSame(['stark'], $this->config('decoupled_settings.settings')->get('selectable_themes'));
+    $this->assertSame('The list of themes a consumer may select was already set.', $message);
+  }
+
+  /**
    * The theme field is installed, and an existing consumer follows the site.
    *
    * A beta2 site has consumers but no theme column. After the update the

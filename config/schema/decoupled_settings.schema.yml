@@ -14,6 +14,12 @@ decoupled_settings.settings:
     expose_theme_manifest:
       type: boolean
       label: 'Expose the active theme structure'
+    selectable_themes:
+      type: sequence
+      label: 'Themes a consumer may select'
+      sequence:
+        type: string
+        label: 'Theme machine name'
     excluded_keys:
       type: sequence
       label: 'Never exposed keys'

@@ -141,6 +141,7 @@ up as missing instead of dropping silently.
 | Exposed config objects | `system.site` | Each listed object, schema-declared keys only |
 | Expose the active theme settings | On | The consumer's theme settings, with logo and favicon resolved |
 | Expose the active theme structure | Off | The `theme` attribute |
+| Themes a consumer may select | None ticked, so every installed theme | Nothing. Limits the themes a consumer can choose |
 
 The consumer screen holds one consumer's overrides, and is reached from the
 consumer itself rather than from the Services menu. Tick a setting to
@@ -149,7 +150,11 @@ when it changes.
 
 A consumer can also select the **theme** it renders as, on the consumer edit
 form. That decides which theme's regions and settings it reads. Leave it
-empty and the consumer follows the site default.
+empty and the consumer follows the site default. The choice belongs to
+whoever edits the consumer, its owner included. The select offers the themes
+listed under **Themes a consumer may select**, or every installed theme when
+none are listed. That includes the admin theme, because an admin frontend is
+a consumer too.
 
 Reading any of this requires the **Read decoupled settings** permission,
 which is not granted to anonymous users. Granting it to the anonymous role
@@ -322,11 +327,16 @@ site's own configuration, and a decoupled site does not otherwise publish
 it, so a site running a custom admin theme discloses that name here. That is
 fingerprinting, not access, and it is why the attribute is opt-in.
 
-The structure names the admin theme but does not expose its settings. To
-serve those, add `claro.settings`, or whichever theme it is, to the exposure
-list. That entry is a literal object name. It will not follow a later change
-of admin theme, the way **Expose the active theme settings** follows the
-consumer's theme, or the site default when the consumer selects none.
+The structure names the admin theme but does not expose its settings. A
+consumer reads them in one of two ways. An admin frontend selects the admin
+theme as its own, and its settings arrive like any other theme's. Otherwise
+an administrator adds `claro.settings`, or whichever theme it is, to the
+exposure list. That entry is a literal
+object name, so it will not follow a later change of admin theme, the way
+**Expose the active theme settings** follows the consumer's theme.
+
+To keep consumers off the admin theme, list the themes they may select and
+leave it out.
 
 **Q: Why does `regions_hidden` name regions that are not in `regions`?**
 

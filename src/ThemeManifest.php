@@ -149,9 +149,11 @@ final readonly class ThemeManifest {
     if ($consumer instanceof ConsumerInterface && $consumer->hasField(self::THEME_FIELD)) {
       $cacheability->addCacheableDependency($consumer);
       $chosen = (string) ($consumer->get(self::THEME_FIELD)->value ?? '');
-      // An uninstalled theme has no regions or settings to read, so it is
-      // treated as no choice at all rather than as a broken response.
-      if ($chosen !== '' && $this->themeInfo($chosen) !== NULL) {
+      // A theme the consumer may not select, or one that is not installed,
+      // is treated as no choice at all rather than as a broken response.
+      // Checked here as well as on the form, because a consumer can also be
+      // written over an API, and the list can narrow after a theme is chosen.
+      if ($chosen !== '' && isset($this->selectableThemes($cacheability)[$chosen])) {
         return $chosen;
       }
     }
@@ -160,6 +162,36 @@ final readonly class ThemeManifest {
     $cacheability->addCacheableDependency($system_theme);
 
     return (string) ($system_theme->get('default') ?? '');
+  }
+
+  /**
+   * Lists the themes a consumer may select.
+   *
+   * An empty list on the settings form means every installed theme, the
+   * admin theme included, because an admin frontend is a consumer too. A
+   * site narrows the choice by listing themes. A listed theme that is not
+   * installed is left out: it has no regions or settings to read.
+   *
+   * @param \Drupal\Core\Cache\CacheableMetadata|null $cacheability
+   *   Collects the cache tags of everything that is read, if given.
+   *
+   * @return array
+   *   Theme machine name to human name, sorted by name.
+   */
+  public function selectableThemes(?CacheableMetadata $cacheability = NULL): array {
+    $settings = $this->configFactory->get('decoupled_settings.settings');
+    $cacheability?->addCacheableDependency($settings);
+    $allowed = $settings->get('selectable_themes') ?: [];
+
+    $themes = [];
+    foreach ($this->themeHandler->listInfo() as $name => $theme) {
+      if ($allowed === [] || in_array($name, $allowed, TRUE)) {
+        $themes[$name] = (string) ($theme->info['name'] ?? $name);
+      }
+    }
+    asort($themes);
+
+    return $themes;
   }
 
   /**

@@ -297,6 +297,71 @@ class ThemeManifestTest extends KernelTestBase {
   }
 
   /**
+   * A consumer naming a theme the site does not list falls back.
+   *
+   * The list is checked when the response is built, not only on the form,
+   * because a consumer can be written over an API and the list can narrow
+   * after a theme was chosen.
+   */
+  public function testConsumerNamingAnUnlistedThemeFallsBack(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $this->config('decoupled_settings.settings')->set('selectable_themes', ['stark'])->save();
+    $consumer = $this->createConsumer('claro');
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('stark', $manifest['default']);
+  }
+
+  /**
+   * With no list, a consumer may select the admin theme.
+   *
+   * An admin frontend is a consumer too, so the admin theme is not a special
+   * case. It reads that theme's regions and its settings object.
+   */
+  public function testConsumerMaySelectTheAdminThemeWhenNothingIsListed(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $this->config('system.theme')->set('admin', 'claro')->save();
+    $consumer = $this->createConsumer('claro');
+
+    $manifest = $this->container->get('decoupled_settings.theme_manifest')
+      ->build(new CacheableMetadata(), $consumer);
+
+    $this->assertSame('claro', $manifest['default']);
+    $this->assertSame('claro.settings', $manifest['settings_object']);
+  }
+
+  /**
+   * The selectable themes are the installed ones the site lists.
+   *
+   * A listed theme that is not installed has nothing to read, so it is not
+   * offered.
+   */
+  public function testSelectableThemesAreTheInstalledOnesListed(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $manifest = $this->container->get('decoupled_settings.theme_manifest');
+
+    $this->assertSame(['claro' => 'Claro', 'stark' => 'Stark'], $manifest->selectableThemes());
+
+    $this->config('decoupled_settings.settings')->set('selectable_themes', ['claro', 'no_such_theme'])->save();
+    $this->assertSame(['claro' => 'Claro'], $manifest->selectableThemes());
+  }
+
+  /**
+   * A response that depends on a consumer's theme varies with the list.
+   */
+  public function testTheSelectableListIsCacheable(): void {
+    $this->container->get('theme_installer')->install(['claro']);
+    $consumer = $this->createConsumer('claro');
+    $cacheability = new CacheableMetadata();
+
+    $this->container->get('decoupled_settings.theme_manifest')->themeFor($consumer, $cacheability);
+
+    $this->assertContains('config:decoupled_settings.settings', $cacheability->getCacheTags());
+  }
+
+  /**
    * The admin theme is the site's, whichever theme a consumer renders as.
    *
    * Nothing renders Drupal's admin UI for a consumer, so this is not a

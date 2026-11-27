@@ -90,3 +90,19 @@ function decoupled_settings_update_10003(): string {
 
   return 'Consumers can now select the theme they render as.';
 }
+
+/**
+ * Add the list of themes a consumer may select, empty.
+ *
+ * An empty list lets a consumer select any installed theme, which is what
+ * the theme field allowed before the list existed. So nothing changes for
+ * a consumer that already chose one.
+ */
+function decoupled_settings_update_10004(): string {
+  $config = \Drupal::configFactory()->getEditable('decoupled_settings.settings');
+  if ($config->get('selectable_themes') === NULL) {
+    $config->set('selectable_themes', [])->save();
+    return 'Consumers can select any installed theme until the list on the settings form is narrowed.';
+  }
+  return 'The list of themes a consumer may select was already set.';
+}

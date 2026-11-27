@@ -15,7 +15,12 @@ and this project adheres to
   site. Block layout in Drupal is partitioned by theme and by nothing else,
   which is what makes this the unit that lets block configuration drive a
   specific frontend. A consumer that selects nothing follows the site
-  default, the same sparse rule the setting overrides use.
+  default, the same sparse rule the setting overrides use. Anyone who can
+  edit the consumer chooses, its owner included, from a select.
+- **Themes a consumer may select** limits that choice. With none ticked,
+  every installed theme is offered, the admin theme included, so nothing
+  changes until a site narrows it. A stored theme the list no longer allows
+  reads as no choice, and the consumer follows the site default.
 - The active theme's structure is available as a `theme` attribute on the
   response: the theme and admin theme names, the config object its settings
   are read from, its regions as machine name to label in declared order, the
