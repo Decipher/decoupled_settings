@@ -47,6 +47,26 @@ final readonly class ThemeSettingsReader {
   }
 
   /**
+   * Lists the theme setting keys that the resolved URLs are derived from.
+   *
+   * Core resolves logo.url and favicon.url from these keys in read(), and
+   * the resolver applies a consumer's overrides afterwards. An override of
+   * one of these arrives too late to change the URL a client reads, so the
+   * forms mark them rather than inviting the edit.
+   *
+   * Only the sources belong here. Overriding favicon.mimetype, for one,
+   * reaches the response and is read, because nothing is computed from it.
+   */
+  public function derivedSourceKeys(): array {
+    return [
+      'logo.path',
+      'logo.use_default',
+      'favicon.path',
+      'favicon.use_default',
+    ];
+  }
+
+  /**
    * Returns the config object name for the site's active theme.
    */
   public function activeThemeConfigName(CacheableMetadata $cacheability): string {

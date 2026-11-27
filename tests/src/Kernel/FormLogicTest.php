@@ -148,12 +148,14 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
-   * A setting with no value is listed with an empty inherited cell.
+   * A setting with no value says so, rather than showing nothing.
    *
    * The notification address is NULL on a fresh site. It is excluded by
-   * default, so this exposes it on purpose to render the NULL path.
+   * default, so this exposes it on purpose to render the NULL path. A
+   * blank cell would read the same as an empty string, which is a
+   * different thing to send a consumer.
    */
-  public function testOverrideFormListsNullValueAsEmpty(): void {
+  public function testOverrideFormNamesMissingValue(): void {
     $this->config('decoupled_settings.settings')
       ->set('excluded_keys', [])
       ->save();
@@ -165,7 +167,7 @@ class FormLogicTest extends KernelTestBase {
       ->buildForm(ConsumerOverridesForm::class, $form_state);
 
     $this->assertArrayHasKey('system.site:mail_notification', $form['settings']);
-    $this->assertSame('', $form['settings']['system.site:mail_notification']['inherited']['#markup']);
+    $this->assertSame('null', $form['settings']['system.site:mail_notification']['inherited']['#markup']);
   }
 
   /**
@@ -205,6 +207,187 @@ class FormLogicTest extends KernelTestBase {
 
     $stored = $this->reloadOverrides($consumer_id);
     $this->assertSame(['system.site:name' => 'Consumer Site'], $stored);
+  }
+
+  /**
+   * A key the resolved URL is derived from cannot be overridden.
+   *
+   * Core resolves logo.url before a consumer's overrides are merged, so an
+   * override of logo.path would change only that key in the response, never
+   * the URL a client renders. All four source keys are locked, and a key
+   * nothing is computed from, such as favicon.mimetype, stays editable.
+   */
+  public function testDerivedThemeKeysAreNotOverridable(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $this->assertArrayHasKey('stark.settings:logo.path', $form['settings']);
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertTrue($row['enabled']['#disabled']);
+    $this->assertStringContainsString('Derived', (string) $row['enabled']['#description']);
+    // A field nobody can type into shows the value it holds, rather than the
+    // empty box that means "inherited" on an editable row.
+    $this->assertSame(
+      $form['settings']['stark.settings:logo.path']['inherited']['#markup'],
+      (string) $row['value']['#default_value']
+    );
+
+    foreach (['logo.path', 'logo.use_default', 'favicon.path', 'favicon.use_default'] as $path) {
+      $this->assertTrue($form['settings']['stark.settings:' . $path]['enabled']['#disabled'], $path);
+    }
+    $this->assertFalse((bool) ($form['settings']['stark.settings:favicon.mimetype']['enabled']['#disabled'] ?? FALSE));
+
+    // The URL is the one to override, so it stays editable.
+    $this->assertArrayHasKey('stark.settings:logo.url', $form['settings']);
+    $this->assertFalse((bool) ($form['settings']['stark.settings:logo.url']['enabled']['#disabled'] ?? FALSE));
+    $this->assertNull($form['settings']['stark.settings:logo.url']['enabled']['#description']);
+  }
+
+  /**
+   * A locked row says what the consumer receives, empty or missing.
+   *
+   * A blank box on a row nobody can edit is ambiguous: the value could be
+   * an empty string, or the form could be declining to show it. The
+   * consumer receives one of them, so the form names which.
+   */
+  public function testLockedRowDescribesAnEmptyValue(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    // The theme uses its default logo, so the stored path is an empty
+    // string and that is exactly what the consumer is sent.
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertSame('""', (string) $row['value']['#default_value']);
+    $this->assertSame('""', (string) $row['inherited']['#markup']);
+
+    // An editable row keeps the empty box, where empty means inherited.
+    $editable = $form['settings']['system.site:slogan'];
+    $this->assertSame('', (string) $editable['value']['#default_value']);
+  }
+
+  /**
+   * A stored override on a locked key keeps its value, whatever is posted.
+   *
+   * Its checkbox stays, so it can be removed, but its value is read-only. A
+   * browser never sends a disabled input, which AdminUiTest pins over HTTP.
+   * This covers a post that names the value anyway, whether from a rebuild,
+   * a forged post or a future change to that handling.
+   */
+  public function testStoredOverrideOnLockedKeySurvivesSave(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'stark.settings:logo.path' => 'themes/custom/brand/logo.svg',
+        'system.site:name' => 'Consumer Site',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'system.site:name' => ['enabled' => 1, 'value' => 'Renamed'],
+        // Ticked, so the override stays, and the posted value is ignored.
+        'stark.settings:logo.path' => ['enabled' => 1, 'value' => 'forged.svg'],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $stored = $this->reloadOverrides($consumer_id);
+    $this->assertSame('themes/custom/brand/logo.svg', $stored['stark.settings:logo.path'] ?? NULL);
+    $this->assertSame('Renamed', $stored['system.site:name'] ?? NULL);
+  }
+
+  /**
+   * A stored override on a locked key can be removed.
+   *
+   * An override stored before its key was locked, or written through the
+   * entity API, would otherwise be permanent: nothing new can be ticked on
+   * that row, but unticking what is there removes it.
+   */
+  public function testStoredOverrideOnLockedKeyCanBeRemoved(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'stark.settings:logo.path' => 'themes/custom/brand/logo.svg',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertFalse((bool) $row['enabled']['#disabled']);
+    $this->assertTrue($row['value']['#disabled']);
+    $this->assertStringContainsString('Clear the checkbox to remove it', (string) $row['enabled']['#description']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'stark.settings:logo.path' => ['enabled' => 0, 'value' => ''],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertArrayNotHasKey('stark.settings:logo.path', $this->reloadOverrides($consumer_id));
+  }
+
+  /**
+   * A row that cannot take a single-field value says so on the checkbox.
+   */
+  public function testDisabledRowExplainsItself(): void {
+    // The test module contributes a sequence, which has no single-field
+    // widget and so is the case this description exists for.
+    $this->enableModules(['decoupled_settings_test']);
+    $consumer = $this->createConsumer();
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $rows = array_filter(
+      $form['settings'],
+      static fn ($row, $key): bool => is_array($row) && !str_starts_with((string) $key, '#') && ($row['enabled']['#disabled'] ?? FALSE),
+      ARRAY_FILTER_USE_BOTH
+    );
+    $this->assertNotEmpty($rows, 'A non-scalar setting is present to disable.');
+    foreach ($rows as $key => $row) {
+      $this->assertNotNull($row['enabled']['#description'], "$key explains itself");
+      $this->assertNotSame('', (string) ($row['value']['#default_value'] ?? ''), "$key shows its value");
+    }
   }
 
   /**

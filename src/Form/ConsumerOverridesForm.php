@@ -8,8 +8,10 @@ use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\decoupled_settings\SettingsMerger;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeSettingsReader;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -32,6 +34,11 @@ final class ConsumerOverridesForm extends FormBase {
   protected SettingsMerger $merger;
 
   /**
+   * The theme settings reader, which knows what it derives.
+   */
+  protected ThemeSettingsReader $themeSettingsReader;
+
+  /**
    * The consumer being edited.
    */
   protected ?ConsumerInterface $consumer = NULL;
@@ -43,6 +50,7 @@ final class ConsumerOverridesForm extends FormBase {
     $instance = new self();
     $instance->resolver = $container->get('decoupled_settings.resolver');
     $instance->merger = $container->get('decoupled_settings.merger');
+    $instance->themeSettingsReader = $container->get('decoupled_settings.theme_settings_reader');
     $instance->setStringTranslation($container->get('string_translation'));
     $instance->setMessenger($container->get('messenger'));
     return $instance;
@@ -106,16 +114,30 @@ final class ConsumerOverridesForm extends FormBase {
         // A non-scalar value has no sensible single-field widget, so it is
         // shown but not editable here rather than mangled into a string.
         $editable = $global === NULL || is_scalar($global);
+        // A key the resolved URL was derived from cannot be given a new
+        // override. Core resolves logo.url and favicon.url before a
+        // consumer's overrides are merged, so an override of the source
+        // changes only its own key in the response, never the URL a client
+        // renders.
+        $derived = $this->isDerivedKey($name, $path);
+        if ($derived) {
+          $editable = FALSE;
+        }
+        // One stored before the key was locked, or written through the
+        // entity API, keeps its checkbox, so it can be removed. Nothing new
+        // can be ticked, and the value stays read-only.
+        $removable = $derived && $overridden;
         $row = ['#tree' => TRUE];
 
         $row['label'] = ['#markup' => $key];
-        $row['inherited'] = ['#markup' => $this->formatValue($global)];
+        $row['inherited'] = ['#markup' => $this->describeValue($global)];
         $row['enabled'] = [
           '#type' => 'checkbox',
           '#default_value' => $overridden,
           '#title' => $this->t('Override @key', ['@key' => $key]),
           '#title_display' => 'invisible',
-          '#disabled' => !$editable,
+          '#disabled' => !$editable && !$removable,
+          '#description' => $this->rowNote($editable, $derived, $removable),
         ];
         $row['value'] = $this->valueWidget($key, $global, $overridden ? $overrides[$key] : NULL, $editable);
 
@@ -181,10 +203,23 @@ final class ConsumerOverridesForm extends FormBase {
     $overrides = $this->currentOverrides();
 
     foreach ($rows as $key => $row) {
+      // A locked row carries no decision: its checkbox was disabled, so
+      // whatever is stored stays exactly as the form displayed it. Core
+      // already ignores input for a disabled element and substitutes its
+      // default, so this is belt and braces, and it says in code what the
+      // save depends on rather than leaving it to core's semantics.
+      if (!empty($form['settings'][$key]['enabled']['#disabled'])) {
+        continue;
+      }
       if (empty($row['enabled'])) {
         // Unticked means inherited. The key is removed rather than stored
         // as an empty value, which would mean "deliberately blank".
         unset($overrides[$key]);
+        continue;
+      }
+      // A ticked row whose value nobody can type into keeps what is stored.
+      // Its only decision is whether to remove the override.
+      if (!empty($form['settings'][$key]['value']['#disabled'])) {
         continue;
       }
       $overrides[$key] = $this->castToGlobalType($key, (string) $row['value'], $globals);
@@ -247,6 +282,30 @@ final class ConsumerOverridesForm extends FormBase {
   }
 
   /**
+   * Tests whether a key is one the resolved URLs are derived from.
+   */
+  protected function isDerivedKey(string $name, string $path): bool {
+    return $this->themeSettingsReader->isThemeSettings($name)
+      && in_array($path, $this->themeSettingsReader->derivedSourceKeys(), TRUE);
+  }
+
+  /**
+   * Says why a row cannot be overridden, or nothing when it can.
+   */
+  protected function rowNote(bool $editable, bool $derived, bool $removable = FALSE): ?TranslatableMarkup {
+    if ($editable) {
+      return NULL;
+    }
+    if ($removable) {
+      return $this->t('Derived: this stored override changes only this key, not the resolved URL. Clear the checkbox to remove it, and override the resolved URL instead.');
+    }
+
+    return $derived
+      ? $this->t('Derived: override the resolved URL instead.')
+      : $this->t('Not editable here: this value is not a single field.');
+  }
+
+  /**
    * Builds the widget that matches the type of the setting.
    *
    * The widget is the typing: a boolean setting is a checkbox, a number is a
@@ -260,6 +319,10 @@ final class ConsumerOverridesForm extends FormBase {
       '#title_display' => 'invisible',
       '#disabled' => !$editable,
     ];
+    // An editable field starts empty on purpose: empty means inherited, and
+    // the inherited column already shows what that is. A field nobody can
+    // type into has no such affordance, so it shows the value it holds.
+    $effective = $override ?? $global;
 
     if (is_bool($global)) {
       return $widget + [
@@ -271,7 +334,18 @@ final class ConsumerOverridesForm extends FormBase {
       return $widget + [
         '#type' => 'number',
         '#step' => is_int($global) ? 1 : 'any',
-        '#default_value' => $override ?? '',
+        '#default_value' => ($editable ? $override : $effective) ?? '',
+      ];
+    }
+
+    // A locked field describes its value, an editable one holds it: typing
+    // over a description would store the description.
+    if (!$editable) {
+      return $widget + [
+        '#type' => 'textfield',
+        '#maxlength' => 512,
+        '#default_value' => $this->describeValue($effective),
+        '#description' => NULL,
       ];
     }
 
@@ -279,8 +353,27 @@ final class ConsumerOverridesForm extends FormBase {
       '#type' => 'textfield',
       '#maxlength' => 512,
       '#default_value' => $override !== NULL ? $this->formatValue($override) : '',
-      '#description' => $editable ? NULL : $this->t('Not editable here.'),
+      '#description' => NULL,
     ];
+  }
+
+  /**
+   * Describes a value for a reader rather than for an input.
+   *
+   * An empty string and a missing value both render as nothing, so a row
+   * nobody can edit leaves the reader unable to tell an empty value from a
+   * value the form declined to show. The consumer receives one of them, and
+   * on a locked row the form is the only place to find out which.
+   */
+  protected function describeValue(mixed $value): string {
+    if ($value === NULL) {
+      return 'null';
+    }
+    if ($value === '') {
+      return '""';
+    }
+
+    return $this->formatValue($value);
   }
 
   /**

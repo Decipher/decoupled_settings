@@ -185,6 +185,65 @@ class AdminUiTest extends BrowserTestBase {
   }
 
   /**
+   * A stored override on a locked row survives a real browser save.
+   *
+   * The row renders disabled, and a browser does not submit a disabled
+   * input at all. This is the case the kernel tests cannot reach: they
+   * hand values straight to the form, which is not what a POST looks like.
+   */
+  public function testStoredOverrideOnLockedRowSurvivesBrowserSave(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $theme = $this->config('system.theme')->get('default') . '.settings';
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        $theme . ':logo.path' => 'themes/custom/brand/logo.svg',
+        'system.site:name' => 'Consumer Site',
+      ],
+    ]);
+    $path = '/admin/config/services/consumer/' . $consumer->id() . '/decoupled-settings';
+
+    $this->drupalGet($path);
+    // Save while changing something else entirely. The locked row is not
+    // touched, and a browser omits it from the POST because it is disabled.
+    $this->submitForm([
+      'settings[system.site:name][value]' => 'Renamed',
+    ], 'Save overrides');
+
+    $stored = $this->reloadOverrides($consumer->id());
+    $this->assertSame(
+      'themes/custom/brand/logo.svg',
+      $stored[$theme . ':logo.path'] ?? NULL,
+      'The locked row keeps its stored override.'
+    );
+    $this->assertSame('Renamed', $stored['system.site:name'] ?? NULL);
+  }
+
+  /**
+   * A stored override on a locked row can be unticked in the browser.
+   */
+  public function testStoredOverrideOnLockedRowCanBeRemovedInTheBrowser(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $theme = $this->config('system.theme')->get('default') . '.settings';
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        $theme . ':logo.path' => 'themes/custom/brand/logo.svg',
+      ],
+    ]);
+    $path = '/admin/config/services/consumer/' . $consumer->id() . '/decoupled-settings';
+
+    $this->drupalGet($path);
+    $this->submitForm([
+      'settings[' . $theme . ':logo.path][enabled]' => FALSE,
+    ], 'Save overrides');
+
+    $this->assertArrayNotHasKey($theme . ':logo.path', $this->reloadOverrides($consumer->id()));
+  }
+
+  /**
    * Unticking a setting removes the override rather than blanking it.
    */
   public function testUntickingClearsTheOverride(): void {
