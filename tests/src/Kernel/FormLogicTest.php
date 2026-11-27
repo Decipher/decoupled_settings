@@ -155,7 +155,7 @@ class FormLogicTest extends KernelTestBase {
    * blank cell would read the same as an empty string, which is a
    * different thing to send a consumer.
    */
-  public function testOverrideFormNamesAMissingValue(): void {
+  public function testOverrideFormNamesMissingValue(): void {
     $this->config('decoupled_settings.settings')
       ->set('excluded_keys', [])
       ->save();
