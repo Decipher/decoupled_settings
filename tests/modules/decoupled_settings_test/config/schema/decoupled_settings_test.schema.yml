@@ -5,6 +5,9 @@ decoupled_settings_test.settings:
     safe:
       type: string
       label: 'A plain declared string'
+    flag:
+      type: boolean
+      label: 'A declared boolean'
     secret_blob:
       type: ignore
       label: 'Declared unknowable'

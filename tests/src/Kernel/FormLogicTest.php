@@ -300,13 +300,14 @@ class FormLogicTest extends KernelTestBase {
    * non-empty string "0", or the frontend receives the wrong type.
    */
   public function testSubmittedValueIsCastToTheGlobalType(): void {
+    $this->exposeTestSettings();
     $consumer = $this->createConsumer();
 
     $form_state = new FormState();
     $form_state->addBuildInfo('args', [$consumer]);
     $form_state->setValues([
       'settings' => [
-        'system.site:admin_compact_mode' => ['enabled' => 1, 'value' => '0'],
+        'decoupled_settings_test.settings:flag' => ['enabled' => 1, 'value' => '0'],
         'system.site:weight_select_max' => ['enabled' => 1, 'value' => '42'],
         'system.site:name' => ['enabled' => 1, 'value' => 'Consumer Site'],
       ],
@@ -316,7 +317,7 @@ class FormLogicTest extends KernelTestBase {
       ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
 
     $stored = $this->reloadOverrides($consumer_id);
-    $this->assertFalse($stored['system.site:admin_compact_mode']);
+    $this->assertFalse($stored['decoupled_settings_test.settings:flag']);
     $this->assertSame(42, $stored['system.site:weight_select_max']);
     $this->assertSame('Consumer Site', $stored['system.site:name']);
   }
@@ -328,6 +329,7 @@ class FormLogicTest extends KernelTestBase {
    * value of the wrong type cannot be entered at all.
    */
   public function testWidgetsMatchSettingTypes(): void {
+    $this->exposeTestSettings();
     $consumer = $this->createConsumer();
 
     $form_state = new FormState();
@@ -335,10 +337,24 @@ class FormLogicTest extends KernelTestBase {
     $form = $this->container->get('form_builder')
       ->buildForm(ConsumerOverridesForm::class, $form_state);
 
-    $this->assertSame('checkbox', $form['settings']['system.site:admin_compact_mode']['value']['#type']);
+    $this->assertSame('checkbox', $form['settings']['decoupled_settings_test.settings:flag']['value']['#type']);
     $this->assertSame('number', $form['settings']['system.site:weight_select_max']['value']['#type']);
     $this->assertSame(1, $form['settings']['system.site:weight_select_max']['value']['#step']);
     $this->assertSame('textfield', $form['settings']['system.site:name']['value']['#type']);
+  }
+
+  /**
+   * Exposes the test module's settings beside system.site.
+   *
+   * The test module owns a boolean, so a core config change cannot remove the
+   * fixture. Drupal 11.5 removed system.site:admin_compact_mode.
+   */
+  protected function exposeTestSettings(): void {
+    $this->enableModules(['decoupled_settings_test']);
+    $this->installConfig(['decoupled_settings_test']);
+    $this->config('decoupled_settings.settings')
+      ->set('exposed_objects', ['system.site', 'decoupled_settings_test.settings'])
+      ->save();
   }
 
   /**
