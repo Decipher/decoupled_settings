@@ -103,6 +103,13 @@ final readonly class ThemeManifest {
 
     $regions = $info['regions'] ?? [];
 
+    // Breakpoint labels are translatable, so a response that carries any
+    // varies by the interface language.
+    $breakpoints = $this->breakpoints($default);
+    if ($breakpoints !== []) {
+      $cacheability->addCacheContexts(['languages:language_interface']);
+    }
+
     return [
       'default' => $default,
       // The admin theme is named, not read. Its settings are exposed only
@@ -126,7 +133,7 @@ final readonly class ThemeManifest {
       // one. Core appends the two without checking, so a theme that hides
       // them itself would list each twice.
       'regions_hidden' => array_values(array_unique($info['regions_hidden'] ?? [])),
-      'breakpoints' => $this->breakpoints($default),
+      'breakpoints' => $breakpoints,
     ];
   }
 

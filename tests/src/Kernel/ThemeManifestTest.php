@@ -32,6 +32,7 @@ class ThemeManifestTest extends KernelTestBase {
     'serialization',
     'jsonapi',
     'consumers',
+    'decoupled_settings',
   ];
 
   /**
@@ -53,7 +54,6 @@ class ThemeManifestTest extends KernelTestBase {
     $this->container->get('theme_installer')->install(['stark']);
     $this->config('system.theme')->set('default', 'stark')->save();
 
-    $this->enableModules(['decoupled_settings']);
     $this->manifest = $this->container->get('decoupled_settings.theme_manifest');
   }
 
@@ -181,6 +181,22 @@ class ThemeManifestTest extends KernelTestBase {
     );
     $this->assertSame('mobile', $manifest['breakpoints']['stark.mobile']['label']);
     $this->assertSame(['1x'], $manifest['breakpoints']['stark.mobile']['multipliers']);
+  }
+
+  /**
+   * Breakpoint labels are translatable, so the manifest varies by language.
+   *
+   * Without breakpoints there is nothing translated, and no reason to vary.
+   */
+  public function testBreakpointLabelsAddTheLanguageContext(): void {
+    $without = new CacheableMetadata();
+    $this->manifest->build($without);
+    $this->assertNotContains('languages:language_interface', $without->getCacheContexts());
+
+    $this->enableModules(['breakpoint']);
+    $with = new CacheableMetadata();
+    $this->container->get('decoupled_settings.theme_manifest')->build($with);
+    $this->assertContains('languages:language_interface', $with->getCacheContexts());
   }
 
   /**
