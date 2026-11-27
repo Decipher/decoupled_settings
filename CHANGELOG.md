@@ -34,6 +34,10 @@ and this project adheres to
   overridable key by key the way a setting is.
 
 ### Fixed
+- A request naming a consumer that does not exist yet no longer keeps its
+  answer after that consumer is created. The global answer for an unknown
+  ID was cached with nothing to end it, so the site answered as though the
+  new consumer did not exist until a cache rebuild.
 - A theme that ships no schema for its settings, as a bare decoupled-only
   theme usually does, no longer loses them. Its settings are bounded by
   core's `theme_settings` type, so its logo, favicon and feature toggles are

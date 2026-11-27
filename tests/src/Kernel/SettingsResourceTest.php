@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Drupal\Tests\decoupled_settings\Kernel;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Cache\CacheableResponseInterface;
 use Drupal\decoupled_settings\Resource\SettingsResource;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\jsonapi\ResourceResponse;
 use Drupal\KernelTests\KernelTestBase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Route;
@@ -75,14 +77,21 @@ class SettingsResourceTest extends KernelTestBase {
    * Runs one request through the resource and returns the primary object.
    */
   protected function runRequest(Request $request) {
+    return $this->processRequest($request)
+      ->getResponseData()->getData()->getIterator()->current();
+  }
+
+  /**
+   * Runs one request through the resource and returns the response.
+   */
+  protected function processRequest(Request $request): ResourceResponse {
     $resource = $this->buildResource();
     $types = $resource->getRouteResourceTypes(
       new Route('/jsonapi/decoupled/settings'),
       'decoupled_settings.settings'
     );
 
-    return $resource->process($request, $types)
-      ->getResponseData()->getData()->getIterator()->current();
+    return $resource->process($request, $types);
   }
 
   /**
@@ -129,6 +138,22 @@ class SettingsResourceTest extends KernelTestBase {
 
     $this->assertNull($object->getField('consumer'));
     $this->assertSame('Global Site', $object->getField('settings')['system.site']['name']);
+  }
+
+  /**
+   * A cached answer for an unknown consumer ends when consumers change.
+   *
+   * The answer for a client ID that matches nothing is cached per ID. It has
+   * to carry the consumer list tag, or creating that consumer would leave
+   * the cached global answer in place.
+   */
+  public function testUnknownConsumerAnswerCarriesTheConsumerListTag(): void {
+    $response = $this->processRequest(
+      Request::create('/jsonapi/decoupled/settings', 'GET', ['consumerId' => 'not_yet_created'])
+    );
+
+    $this->assertInstanceOf(CacheableResponseInterface::class, $response);
+    $this->assertContains('consumer_list', $response->getCacheableMetadata()->getCacheTags());
   }
 
   /**

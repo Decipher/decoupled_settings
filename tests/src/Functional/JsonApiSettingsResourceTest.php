@@ -428,6 +428,29 @@ class JsonApiSettingsResourceTest extends BrowserTestBase {
   }
 
   /**
+   * A consumer created after its ID was asked for is resolved.
+   *
+   * The global answer for an unknown ID is cached. Creating the consumer
+   * invalidates it, so the next request names the new consumer.
+   */
+  public function testConsumerCreatedAfterAnUnknownAnswerIsResolved(): void {
+    $this->grantAnonymousRead();
+
+    $before = $this->fetch('consumerId=late_app');
+    $this->assertNull($before['data']['attributes']['consumer']);
+
+    Consumer::create([
+      'client_id' => 'late_app',
+      'label' => 'Late app',
+      SettingsResolver::OVERRIDE_FIELD => ['system.site:name' => 'Late Site'],
+    ])->save();
+
+    $after = $this->fetch('consumerId=late_app');
+    $this->assertSame('late_app', $after['data']['attributes']['consumer']);
+    $this->assertSame('Late Site', $after['data']['attributes']['settings']['system.site']['name']);
+  }
+
+  /**
    * Write attempts are rejected.
    */
   public function testWriteIsRejected(): void {
