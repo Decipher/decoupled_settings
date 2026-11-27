@@ -120,7 +120,7 @@ Run each tool through its `ahoy` wrapper, never the binary directly:
 ## Code Quality Tools
 
 - **CSpell**: Spell checking across the codebase (config at `.cspell.json`)
-- **PHPCS**: Drupal, DrupalPractice, DrevOps and PHPCompatibility standards
+- **PHPCS**: Drupal and DrupalPractice standards, plus a `declare(strict_types=1)` check
 - **PHPStan**: Static analysis with Drupal extensions
 - **Rector**: Automated refactoring and deprecation fixes
 
