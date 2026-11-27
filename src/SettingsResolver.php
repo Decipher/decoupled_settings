@@ -54,20 +54,7 @@ final readonly class SettingsResolver {
    *   Settings keyed by config object name, then by key.
    */
   public function resolve(?ConsumerInterface $consumer, CacheableMetadata $cacheability): array {
-    $settings = $this->configFactory->get('decoupled_settings.settings');
-    $cacheability->addCacheableDependency($settings);
-
-    // The theme settings a consumer reads are its own theme's, so the group
-    // the manifest names in settings_object is the group that is delivered.
-    // Naming one theme and shipping another's settings would be a lie the
-    // client cannot detect.
-    $globals = $this->globals(
-      $settings->get('exposed_objects') ?: [],
-      (bool) $settings->get('expose_theme_settings'),
-      $settings->get('excluded_keys') ?: [],
-      $cacheability,
-      $this->themeManifest->themeFor($consumer, $cacheability)
-    );
+    $globals = $this->globalsFor($consumer, $cacheability);
 
     $overrides = $this->overridesFor($consumer, $cacheability);
     $resolved = [];
@@ -76,6 +63,36 @@ final readonly class SettingsResolver {
     }
 
     return $resolved;
+  }
+
+  /**
+   * Builds the global values one consumer inherits, before its overrides.
+   *
+   * The theme settings a consumer reads are its own theme's, so the group
+   * the manifest names in settings_object is the group that is delivered.
+   * Naming one theme and shipping another's settings would be a lie the
+   * client cannot detect. The overrides form builds from this too, so the
+   * rows it offers are the settings this consumer actually reads.
+   *
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer, or NULL for the site default.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags and contexts of everything that is read.
+   *
+   * @return array
+   *   Global settings keyed by config object name, then by key.
+   */
+  public function globalsFor(?ConsumerInterface $consumer, CacheableMetadata $cacheability): array {
+    $settings = $this->configFactory->get('decoupled_settings.settings');
+    $cacheability->addCacheableDependency($settings);
+
+    return $this->globals(
+      $settings->get('exposed_objects') ?: [],
+      (bool) $settings->get('expose_theme_settings'),
+      $settings->get('excluded_keys') ?: [],
+      $cacheability,
+      $this->themeManifest->themeFor($consumer, $cacheability)
+    );
   }
 
   /**

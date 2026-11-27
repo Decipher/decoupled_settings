@@ -69,9 +69,10 @@ final class ConsumerOverridesForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state, ?ConsumerInterface $consumer = NULL): array {
     $this->consumer = $consumer;
 
-    // The global values, with no consumer, are what an unoverridden setting
-    // resolves to.
-    $globals = $this->resolver->resolve(NULL, new CacheableMetadata());
+    // The values this consumer inherits, read for its own theme, are what
+    // an unoverridden setting resolves to. A consumer on its own theme
+    // reads that theme's settings group, not the site default's.
+    $globals = $this->resolver->globalsFor($consumer, new CacheableMetadata());
     $overrides = $this->currentOverrides();
 
     $form['#attached']['library'][] = 'decoupled_settings/settings-filter';
@@ -172,7 +173,7 @@ final class ConsumerOverridesForm extends FormBase {
   public function validateForm(array &$form, FormStateInterface $form_state): void {
     parent::validateForm($form, $form_state);
 
-    $globals = $this->resolver->resolve(NULL, new CacheableMetadata());
+    $globals = $this->resolver->globalsFor($this->consumer, new CacheableMetadata());
     $rows = $form_state->getValue('settings') ?: [];
 
     foreach ($rows as $key => $row) {
@@ -195,7 +196,7 @@ final class ConsumerOverridesForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
-    $globals = $this->resolver->resolve(NULL, new CacheableMetadata());
+    $globals = $this->resolver->globalsFor($this->consumer, new CacheableMetadata());
     $rows = $form_state->getValue('settings') ?: [];
     // Start from the stored map, so an override whose setting is not
     // exposed right now survives the save. A row can only change its own

@@ -9,6 +9,9 @@ use Drupal\Core\Form\FormState;
 use Drupal\decoupled_settings\Form\ConsumerOverridesForm;
 use Drupal\decoupled_settings\Form\SettingsForm;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
+use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\KernelTests\KernelTestBase;
 
 /**
@@ -272,6 +275,66 @@ class FormLogicTest extends KernelTestBase {
 
     $stored = $this->reloadOverrides($consumer_id);
     $this->assertSame(['system.site:name' => 'Consumer Site'], $stored);
+  }
+
+  /**
+   * A consumer on its own theme is offered that theme's settings.
+   *
+   * The form builds from what this consumer inherits, so its rows are the
+   * settings group it actually reads. Offering the site default's group
+   * instead would save overrides that never reach the consumer.
+   */
+  public function testOverrideFormOffersTheConsumersOwnTheme(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([ThemeManifest::THEME_FIELD => 'claro']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $this->assertArrayHasKey('claro.settings:logo.url', $form['settings']);
+    $this->assertArrayNotHasKey('stark.settings:logo.url', $form['settings']);
+  }
+
+  /**
+   * An override of the consumer's own theme reaches what it reads.
+   *
+   * A boolean shows it: the submitted "0" is cast to FALSE only when the
+   * form knows the setting it overrides, which it does only when it reads
+   * the consumer's own theme.
+   */
+  public function testOverrideOfTheConsumersThemeIsRead(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([ThemeManifest::THEME_FIELD => 'claro']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'claro.settings:features.favicon' => ['enabled' => 1, 'value' => '0'],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertSame([], $form_state->getErrors());
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+    $storage->resetCache();
+    $reloaded = $storage->load($consumer_id);
+    $this->assertInstanceOf(ConsumerInterface::class, $reloaded);
+    $resolved = $this->container->get('decoupled_settings.resolver')
+      ->resolve($reloaded, new CacheableMetadata());
+    $this->assertFalse($resolved['claro.settings']['features']['favicon']);
   }
 
   /**
