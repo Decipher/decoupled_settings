@@ -11,6 +11,7 @@ use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\decoupled_settings\ConsumerAccess;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
 use Drupal\jsonapi\JsonApiResource\LinkCollection;
 use Drupal\jsonapi\JsonApiResource\ResourceObject;
 use Drupal\jsonapi\JsonApiResource\ResourceObjectData;
@@ -35,6 +36,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     private readonly SettingsResolver $settingsResolver,
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly ConsumerAccess $consumerAccess,
+    private readonly ThemeManifest $themeManifest,
   ) {}
 
   /**
@@ -45,6 +47,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       $container->get('decoupled_settings.resolver'),
       $container->get('entity_type.manager'),
       $container->get('decoupled_settings.consumer_access'),
+      $container->get('decoupled_settings.theme_manifest'),
     );
   }
 
@@ -85,6 +88,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
       [
         'settings' => $resolved,
         'consumer' => $consumer?->getClientId(),
+        'theme' => $this->themeManifest->forResponse($consumer, $cacheability),
       ],
       new LinkCollection([])
     );
@@ -137,6 +141,7 @@ final class SettingsResource extends ResourceBase implements ContainerInjectionI
     $fields = [
       'settings' => new ResourceTypeAttribute('settings'),
       'consumer' => new ResourceTypeAttribute('consumer'),
+      'theme' => new ResourceTypeAttribute('theme'),
     ];
 
     // A non-entity, read-only resource type: not internal, locatable, not

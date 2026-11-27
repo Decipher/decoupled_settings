@@ -10,6 +10,13 @@ services:
     arguments:
       - '@current_user'
 
+  decoupled_settings.theme_manifest:
+    class: Drupal\decoupled_settings\ThemeManifest
+    arguments:
+      - '@config.factory'
+      - '@theme_handler'
+      - '@?breakpoint.manager'
+
   decoupled_settings.merger:
     class: Drupal\decoupled_settings\SettingsMerger
 
@@ -21,6 +28,7 @@ services:
       - '@decoupled_settings.theme_settings_reader'
       - '@decoupled_settings.merger'
       - '@module_handler'
+      - '@decoupled_settings.theme_manifest'
 
   decoupled_settings.page_cache_deny_consumer_header:
     class: Drupal\decoupled_settings\PageCache\DenyOnConsumerHeader

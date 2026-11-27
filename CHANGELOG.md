@@ -8,6 +8,39 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+- A consumer can select the theme it renders as, on its own edit form. The
+  theme decides which regions and which theme settings that consumer reads,
+  so two consumers on different themes read different structures from one
+  site. Block layout in Drupal is partitioned by theme and by nothing else,
+  which is what makes this the unit that lets block configuration drive a
+  specific frontend. A consumer that selects nothing follows the site
+  default, the same sparse rule the setting overrides use. Anyone who can
+  edit the consumer chooses, its owner included, from a select.
+- **Themes a consumer may select** limits that choice. With none ticked,
+  every installed theme is offered, the admin theme included, so nothing
+  changes until a site narrows it. A stored theme the list no longer allows
+  reads as no choice, and the consumer follows the site default.
+- The active theme's structure is available as a `theme` attribute on the
+  response: the theme and admin theme names, the config object its settings
+  are read from, its regions as machine name to label in declared order, the
+  regions it hides, and the breakpoints it declares. Regions live in a
+  theme's `.info.yml`, so they are neither entities nor config and nothing
+  else exposes them. A decoupled frontend that groups blocks by region had
+  to hardcode the region names and the theme, and those copies drifted
+  silently. Off by default, and switched on with **Expose the active theme
+  structure**. Structure rather than settings: it follows the consumer's
+  theme, or the site default when the consumer selects none, and is not
+  overridable key by key the way a setting is.
+
+### Fixed
+- A theme that ships no schema for its settings, as a bare decoupled-only
+  theme usually does, no longer loses them. Its settings are bounded by
+  core's `theme_settings` type, so its logo, favicon and feature toggles are
+  exposed and keys of its own still are not. Before, the whole group was
+  dropped without a word, and with a consumer on that theme the manifest
+  named a settings object the payload did not carry.
+
 ### Security
 - Naming a consumer now requires access to that consumer. Anyone holding
   **Read decoupled settings** could read any consumer's overrides by naming

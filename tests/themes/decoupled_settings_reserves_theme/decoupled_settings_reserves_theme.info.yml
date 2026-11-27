@@ -1,0 +1,14 @@
+name: 'Decoupled Settings reserves theme'
+type: theme
+description: 'A theme that declares and hides the core page_top and page_bottom regions itself. Used by tests.'
+package: Testing
+version: VERSION
+base theme: false
+hidden: true
+regions:
+  content: Content
+  page_top: 'Page top'
+  page_bottom: 'Page bottom'
+regions_hidden:
+  - page_top
+  - page_bottom

@@ -1,0 +1,253 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\decoupled_settings;
+
+use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Extension\ThemeHandlerInterface;
+
+/**
+ * Describes the active theme's structure.
+ *
+ * A theme declares its regions in its .info.yml file. Regions are not
+ * entities and not config, so nothing exposes them over JSON:API. A
+ * decoupled frontend that groups blocks by region has to hardcode the region
+ * names and the theme they belong to, and those copies drift from the
+ * backend without any error.
+ *
+ * This class reads what Drupal records, and only that. It does not read
+ * templates.
+ *
+ * The manifest is structure, not settings, so it is not merged with the
+ * per-consumer overrides. It describes the theme the consumer renders as,
+ * which is the site default unless the consumer selects its own.
+ */
+final readonly class ThemeManifest {
+
+  /**
+   * The name of the theme field on the consumer entity.
+   */
+  public const string THEME_FIELD = 'decoupled_settings_theme';
+
+  /**
+   * Constructs the manifest builder.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $configFactory
+   *   The config factory.
+   * @param \Drupal\Core\Extension\ThemeHandlerInterface $themeHandler
+   *   The theme handler.
+   * @param object|null $breakpointManager
+   *   The breakpoint manager. Typed object on purpose: the service only
+   *   exists while the breakpoint module is installed.
+   */
+  public function __construct(
+    private ConfigFactoryInterface $configFactory,
+    private ThemeHandlerInterface $themeHandler,
+    private ?object $breakpointManager = NULL,
+  ) {}
+
+  /**
+   * Builds the manifest a response carries, if the site exposes one.
+   *
+   * The exposure decision lives here rather than in the transport, so it is
+   * decided once no matter how many transports there are.
+   *
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer to describe the theme for, or NULL for the site default.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   *
+   * @return array|null
+   *   The manifest, or NULL when it is not exposed.
+   */
+  public function forResponse(?ConsumerInterface $consumer, CacheableMetadata $cacheability): ?array {
+    $settings = $this->configFactory->get('decoupled_settings.settings');
+    $cacheability->addCacheableDependency($settings);
+    if (!$settings->get('expose_theme_manifest')) {
+      return NULL;
+    }
+
+    return $this->build($cacheability, $consumer) ?: NULL;
+  }
+
+  /**
+   * Builds the manifest for the site's active theme.
+   *
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer whose theme to describe, or NULL for the site default.
+   *
+   * @return array
+   *   The manifest. Empty if the theme is not installed.
+   */
+  public function build(CacheableMetadata $cacheability, ?ConsumerInterface $consumer = NULL): array {
+    // A theme is added or removed by installing it, which rewrites
+    // core.extension. The .info.yml itself only changes with the code.
+    $cacheability->addCacheTags(['config:core.extension']);
+
+    $default = $this->themeFor($consumer, $cacheability);
+    $info = $this->themeInfo($default);
+    if ($info === NULL) {
+      return [];
+    }
+
+    // The admin theme is read below whichever theme the consumer renders as,
+    // and themeFor() returns before reading system.theme when a consumer
+    // picked one. So depend on it here rather than relying on that path.
+    $system_theme = $this->configFactory->get('system.theme');
+    $cacheability->addCacheableDependency($system_theme);
+
+    $regions = $info['regions'] ?? [];
+
+    // Breakpoint labels are translatable, so a response that carries any
+    // varies by the interface language.
+    $breakpoints = $this->breakpoints($default);
+    if ($breakpoints !== []) {
+      $cacheability->addCacheContexts(['languages:language_interface']);
+    }
+
+    return [
+      'default' => $default,
+      // The admin theme is named, not read. Its settings are exposed only
+      // if an administrator lists the object explicitly. It is the site's
+      // admin theme in every case: a consumer chooses what it renders as,
+      // and nothing renders Drupal's admin UI for a consumer.
+      'admin' => (string) ($system_theme->get('admin') ?? '') ?: NULL,
+      // The config object the theme's own settings are read from. A client
+      // reads the settings group under this name instead of guessing which
+      // group belongs to the theme. Naming it does not expose it: the group
+      // is absent unless the theme settings are exposed too.
+      'settings_object' => $default . '.settings',
+      // Machine name to label, in the order the theme declares them. That
+      // order is the only ordering Drupal records.
+      'regions' => array_map(strval(...), $regions),
+      // Regions the theme hides from the block layout screen. Core appends
+      // page_top and page_bottom to every theme in system_info_alter(), so
+      // this list is never empty and can name a region the theme does not
+      // declare. It is passed through as recorded, not subtracted from the
+      // regions above, because a client may have its own reason to render
+      // one. Core appends the two without checking, so a theme that hides
+      // them itself would list each twice.
+      'regions_hidden' => array_values(array_unique($info['regions_hidden'] ?? [])),
+      'breakpoints' => $breakpoints,
+    ];
+  }
+
+  /**
+   * Resolves the theme a consumer renders as.
+   *
+   * A consumer that names no theme follows the site default, which is the
+   * same sparse rule the setting overrides use: storing nothing means
+   * following the site.
+   *
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The consumer, or NULL for the site default.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheability
+   *   Collects the cache tags of everything that is read.
+   *
+   * @return string
+   *   The theme machine name, which may be empty on a broken site.
+   */
+  public function themeFor(?ConsumerInterface $consumer, CacheableMetadata $cacheability): string {
+    if ($consumer instanceof ConsumerInterface && $consumer->hasField(self::THEME_FIELD)) {
+      $cacheability->addCacheableDependency($consumer);
+      $chosen = (string) ($consumer->get(self::THEME_FIELD)->value ?? '');
+      // A theme the consumer may not select, or one that is not installed,
+      // is treated as no choice at all rather than as a broken response.
+      // Checked here as well as on the form, because a consumer can also be
+      // written over an API, and the list can narrow after a theme is chosen.
+      if ($chosen !== '' && isset($this->selectableThemes($cacheability)[$chosen])) {
+        return $chosen;
+      }
+    }
+
+    $system_theme = $this->configFactory->get('system.theme');
+    $cacheability->addCacheableDependency($system_theme);
+
+    return (string) ($system_theme->get('default') ?? '');
+  }
+
+  /**
+   * Lists the themes a consumer may select.
+   *
+   * An empty list on the settings form means every installed theme, the
+   * admin theme included, because an admin frontend is a consumer too. A
+   * site narrows the choice by listing themes. A listed theme that is not
+   * installed is left out: it has no regions or settings to read.
+   *
+   * @param \Drupal\Core\Cache\CacheableMetadata|null $cacheability
+   *   Collects the cache tags of everything that is read, if given.
+   *
+   * @return array
+   *   Theme machine name to human name, sorted by name.
+   */
+  public function selectableThemes(?CacheableMetadata $cacheability = NULL): array {
+    $settings = $this->configFactory->get('decoupled_settings.settings');
+    $cacheability?->addCacheableDependency($settings);
+    $allowed = $settings->get('selectable_themes') ?: [];
+
+    $themes = [];
+    foreach ($this->themeHandler->listInfo() as $name => $theme) {
+      if ($allowed === [] || in_array($name, $allowed, TRUE)) {
+        $themes[$name] = (string) ($theme->info['name'] ?? $name);
+      }
+    }
+    asort($themes);
+
+    return $themes;
+  }
+
+  /**
+   * Reads one theme's .info.yml data.
+   *
+   * @return array|null
+   *   The theme info, or NULL if the theme is not installed.
+   */
+  private function themeInfo(string $theme): ?array {
+    if ($theme === '') {
+      return NULL;
+    }
+    try {
+      return $this->themeHandler->getTheme($theme)->info ?? NULL;
+    }
+    catch (\Throwable) {
+      // The default theme names a theme that is not installed. That is a
+      // broken site, but it must not break this endpoint.
+      return NULL;
+    }
+  }
+
+  /**
+   * Reads the breakpoints a theme declares.
+   *
+   * Breakpoints live in a separate .breakpoints.yml file and are only
+   * readable while the breakpoint module is installed.
+   *
+   * @return array
+   *   Breakpoint id to its label, media query and multipliers. Empty when
+   *   the module is not installed or the theme declares none.
+   */
+  private function breakpoints(string $theme): array {
+    $manager = $this->breakpointManager;
+    if ($manager === NULL || !method_exists($manager, 'getBreakpointsByGroup')) {
+      return [];
+    }
+
+    $breakpoints = [];
+    foreach ($manager->getBreakpointsByGroup($theme) as $id => $breakpoint) {
+      $breakpoints[$id] = [
+        'label' => (string) $breakpoint->getLabel(),
+        'mediaQuery' => $breakpoint->getMediaQuery(),
+        'weight' => (int) $breakpoint->getWeight(),
+        'multipliers' => array_values($breakpoint->getMultipliers()),
+      ];
+    }
+
+    return $breakpoints;
+  }
+
+}

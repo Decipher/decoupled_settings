@@ -7,6 +7,7 @@ namespace Drupal\decoupled_settings\Form;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\Entity\ConfigEntityTypeInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Extension\ThemeHandlerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\decoupled_settings\SettingsMerger;
@@ -39,6 +40,11 @@ class SettingsForm extends ConfigFormBase {
   protected EntityTypeManagerInterface $entityTypeManager;
 
   /**
+   * The theme handler.
+   */
+  protected ThemeHandlerInterface $themeHandler;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container): static {
@@ -46,6 +52,7 @@ class SettingsForm extends ConfigFormBase {
     $instance->resolver = $container->get('decoupled_settings.resolver');
     $instance->merger = $container->get('decoupled_settings.merger');
     $instance->entityTypeManager = $container->get('entity_type.manager');
+    $instance->themeHandler = $container->get('theme_handler');
     return $instance;
   }
 
@@ -136,6 +143,26 @@ class SettingsForm extends ConfigFormBase {
       '#default_value' => (bool) $config->get('expose_theme_settings'),
     ];
 
+    $form['expose_theme_manifest'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Expose the active theme structure'),
+      '#description' => $this->t('Adds the theme regions, their labels and declared order, the hidden regions, the names of the default and admin themes, and the declared breakpoints. A frontend that lays out blocks by region reads them from here instead of hardcoding them. It describes the theme each consumer selects, or the site default when a consumer selects none, and it cannot be overridden setting by setting. The admin theme is named, not read: to expose its settings, add them to the list above by name.'),
+      '#default_value' => (bool) $config->get('expose_theme_manifest'),
+    ];
+
+    $themes = [];
+    foreach ($this->themeHandler->listInfo() as $name => $theme) {
+      $themes[$name] = $theme->info['name'] ?? $name;
+    }
+    asort($themes);
+    $form['selectable_themes'] = [
+      '#type' => 'checkboxes',
+      '#title' => $this->t('Themes a consumer may select'),
+      '#description' => $this->t("A consumer chooses the theme it renders as on its own edit form, and reads that theme's regions and settings. Leave every box unticked to offer every installed theme, the admin theme included."),
+      '#options' => $themes,
+      '#default_value' => $config->get('selectable_themes') ?: [],
+    ];
+
     $form['excluded_keys'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Excluded settings'),
@@ -208,7 +235,9 @@ class SettingsForm extends ConfigFormBase {
    * response is a 200 with fewer attributes and no explanation.
    *
    * An object with no schema is labelled rather than hidden, so choosing it
-   * is an informed act instead of a mystery.
+   * is an informed act instead of a mystery. A theme's settings with no
+   * schema are labelled too: core's theme settings shape bounds them, so they
+   * expose that and no more.
    */
   protected function availableObjects(array $exposed): array {
     $typed = $this->typedConfigManager();
@@ -226,8 +255,13 @@ class SettingsForm extends ConfigFormBase {
       }
       $group = explode('.', $name)[0];
       $label = $name;
-      if (!$typed->hasConfigSchema($name)) {
+      // The resolver owns the rule for what bounds an object, so the label
+      // cannot drift from what the endpoint actually serves.
+      if (!$this->resolver->isSchemaBounded($name)) {
         $label .= ' (' . $this->t('no schema, exposes nothing') . ')';
+      }
+      elseif (!$typed->hasConfigSchema($name)) {
+        $label .= ' (' . $this->t('no schema, core theme settings only') . ')';
       }
       $options[$group][$name] = $label;
     }
@@ -333,6 +367,8 @@ class SettingsForm extends ConfigFormBase {
     $this->config('decoupled_settings.settings')
       ->set('exposed_objects', $form_state->get('exposed_working') ?: [])
       ->set('expose_theme_settings', (bool) $form_state->getValue('expose_theme_settings'))
+      ->set('expose_theme_manifest', (bool) $form_state->getValue('expose_theme_manifest'))
+      ->set('selectable_themes', array_values(array_filter((array) $form_state->getValue('selectable_themes'))))
       ->set('excluded_keys', $this->lines($form_state->getValue('excluded_keys')))
       ->save();
 

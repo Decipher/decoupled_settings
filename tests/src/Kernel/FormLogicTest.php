@@ -9,6 +9,9 @@ use Drupal\Core\Form\FormState;
 use Drupal\decoupled_settings\Form\ConsumerOverridesForm;
 use Drupal\decoupled_settings\Form\SettingsForm;
 use Drupal\decoupled_settings\SettingsResolver;
+use Drupal\decoupled_settings\ThemeManifest;
+use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\KernelTests\KernelTestBase;
 
 /**
@@ -99,6 +102,37 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
+   * The add list says what a schema-less object would actually expose.
+   *
+   * A theme's settings with no schema are bounded by core's theme settings
+   * shape, so they expose that. Any other object with no schema exposes
+   * nothing. The label asks the resolver, so it cannot drift from what the
+   * endpoint serves.
+   */
+  public function testAddListLabelsSchemaLessObjectsByWhatTheyExpose(): void {
+    $this->container->get('theme_installer')->install(['decoupled_settings_bare_theme']);
+    $storage = $this->container->get('config.storage');
+    $storage->write('decoupled_settings_bare_theme.settings', ['brand_accent' => '#ff0000']);
+    $storage->write('decoupled_settings.no_such_schema', ['secret' => 'value']);
+
+    $form_state = new FormState();
+    $form = $this->container->get('form_builder')->buildForm(SettingsForm::class, $form_state);
+
+    $flat = [];
+    foreach ($form['exposed']['objects']['_new']['name']['data']['add_object']['#options'] as $group) {
+      $flat += is_array($group) ? $group : [];
+    }
+    $this->assertSame(
+      'decoupled_settings_bare_theme.settings (no schema, core theme settings only)',
+      (string) $flat['decoupled_settings_bare_theme.settings']
+    );
+    $this->assertSame(
+      'decoupled_settings.no_such_schema (no schema, exposes nothing)',
+      (string) $flat['decoupled_settings.no_such_schema']
+    );
+  }
+
+  /**
    * The settings form rejects an exclusion that is not object:path.
    */
   public function testSettingsFormRejectsMalformedExclusion(): void {
@@ -129,6 +163,40 @@ class FormLogicTest extends KernelTestBase {
     $this->assertSame(['system.site', 'system.date'], $config->get('exposed_objects'));
     $this->assertTrue($config->get('expose_theme_settings'));
     $this->assertSame(['system.site:mail'], $config->get('excluded_keys'));
+  }
+
+  /**
+   * The settings form lists the installed themes for consumers to select.
+   *
+   * Nothing is ticked by default, which offers every installed theme.
+   */
+  public function testSettingsFormOffersInstalledThemesToList(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+
+    $form_state = new FormState();
+    $form = $this->container->get('form_builder')->buildForm(SettingsForm::class, $form_state);
+
+    $this->assertSame('checkboxes', $form['selectable_themes']['#type']);
+    $this->assertSame(['claro' => 'Claro', 'stark' => 'Stark'], $form['selectable_themes']['#options']);
+    $this->assertSame([], $form['selectable_themes']['#default_value']);
+  }
+
+  /**
+   * Only the ticked themes are saved to the list.
+   */
+  public function testSettingsFormSavesSelectableThemes(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+
+    $form_state = new FormState();
+    $form_state->set('exposed_working', ['system.site']);
+    $form_state->setValues([
+      'selectable_themes' => ['claro' => 'claro'],
+      'excluded_keys' => '',
+    ]);
+    $this->container->get('form_builder')->submitForm(SettingsForm::class, $form_state);
+
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame(['claro'], $this->config('decoupled_settings.settings')->get('selectable_themes'));
   }
 
   /**
@@ -207,6 +275,66 @@ class FormLogicTest extends KernelTestBase {
 
     $stored = $this->reloadOverrides($consumer_id);
     $this->assertSame(['system.site:name' => 'Consumer Site'], $stored);
+  }
+
+  /**
+   * A consumer on its own theme is offered that theme's settings.
+   *
+   * The form builds from what this consumer inherits, so its rows are the
+   * settings group it actually reads. Offering the site default's group
+   * instead would save overrides that never reach the consumer.
+   */
+  public function testOverrideFormOffersTheConsumersOwnTheme(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([ThemeManifest::THEME_FIELD => 'claro']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+
+    $this->assertArrayHasKey('claro.settings:logo.url', $form['settings']);
+    $this->assertArrayNotHasKey('stark.settings:logo.url', $form['settings']);
+  }
+
+  /**
+   * An override of the consumer's own theme reaches what it reads.
+   *
+   * A boolean shows it: the submitted "0" is cast to FALSE only when the
+   * form knows the setting it overrides, which it does only when it reads
+   * the consumer's own theme.
+   */
+  public function testOverrideOfTheConsumersThemeIsRead(): void {
+    $this->container->get('theme_installer')->install(['stark', 'claro']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([ThemeManifest::THEME_FIELD => 'claro']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'claro.settings:features.favicon' => ['enabled' => 1, 'value' => '0'],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertSame([], $form_state->getErrors());
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+    $storage->resetCache();
+    $reloaded = $storage->load($consumer_id);
+    $this->assertInstanceOf(ConsumerInterface::class, $reloaded);
+    $resolved = $this->container->get('decoupled_settings.resolver')
+      ->resolve($reloaded, new CacheableMetadata());
+    $this->assertFalse($resolved['claro.settings']['features']['favicon']);
   }
 
   /**

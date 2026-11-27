@@ -15,6 +15,7 @@ use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\decoupled_settings\ThemeManifest;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\decoupled_settings\SettingsResolver;
 
@@ -47,6 +48,17 @@ function decoupled_settings_entity_base_field_info(EntityTypeInterface $entity_t
       // column without a null guard, so the column must never be NULL.
       ->setDefaultValue([[]])
       ->setRevisionable(TRUE);
+
+    // A plain string rather than list_string: the allowed values are the
+    // installed themes, which change without a schema update, and a
+    // list_string would add a dependency on the options module to store one
+    // machine name. The consumer form turns it into a select.
+    $fields[ThemeManifest::THEME_FIELD] = BaseFieldDefinition::create('string')
+      ->setLabel(t('Theme'))
+      ->setDescription(t('The theme this consumer renders as. Its regions and settings are what this consumer reads. Leave empty to follow the site default.'))
+      ->setRevisionable(TRUE)
+      ->setDisplayOptions('form', ['type' => 'string_textfield', 'weight' => 90])
+      ->setDisplayConfigurable('form', TRUE);
   }
 
   return $fields;
@@ -103,11 +115,28 @@ function decoupled_settings_entity_operation(EntityInterface $entity, ?Cacheable
 /**
  * Implements hook_form_FORM_ID_alter() for consumer_form.
  *
- * The Settings local task lives in the Navigation top bar on sites that use
- * it, which is easy to miss. This puts a visible pointer on the form people
+ * Turns the theme field into a select of the themes a consumer may choose,
+ * for anyone who can edit the consumer.
+ *
+ * For administrators of this module it also adds a pointer to the Settings
+ * local task. That task lives in the Navigation top bar on sites that use
+ * it, which is easy to miss, so the pointer goes on the form people
  * actually edit consumers with.
  */
 function decoupled_settings_form_consumer_form_alter(array &$form, FormStateInterface $form_state): void {
+  // The stored value is a machine name, so offer the themes a consumer may
+  // select rather than a free-text box. This applies to anyone who can edit
+  // the consumer, its owner included: choosing the theme it renders as is
+  // the consumer's own decision.
+  $theme_field = ThemeManifest::THEME_FIELD;
+  if (isset($form[$theme_field]['widget'][0]['value'])) {
+    $form[$theme_field]['widget'][0]['value']['#type'] = 'select';
+    $form[$theme_field]['widget'][0]['value']['#options'] = \Drupal::service('decoupled_settings.theme_manifest')->selectableThemes();
+    $form[$theme_field]['widget'][0]['value']['#empty_option'] = t('- Follow the site default -');
+    $form[$theme_field]['widget'][0]['value']['#empty_value'] = '';
+    unset($form[$theme_field]['widget'][0]['value']['#size']);
+  }
+
   if (!\Drupal::currentUser()->hasPermission('administer decoupled settings')) {
     return;
   }
