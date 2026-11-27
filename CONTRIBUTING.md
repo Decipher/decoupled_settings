@@ -163,7 +163,7 @@ With XDebug on, every request starts a debug session, so a browser extension tha
 ## Coding standards
 
 The following tools check the codebase, each with its configuration file in the root of the project:
-- PHPCS checks PHP code against the `Drupal`, `DrupalPractice`, `DrevOps` and `PHPCompatibility` standards.
+- PHPCS checks PHP code against the `Drupal` and `DrupalPractice` standards, and requires `declare(strict_types=1)`.
 - PHPStan analyzes PHP code statically.
 - Drupal Rector finds deprecated PHP code and fixes it.
 - CSpell checks the spelling.
