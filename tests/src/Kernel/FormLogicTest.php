@@ -213,7 +213,9 @@ class FormLogicTest extends KernelTestBase {
    * A key the resolved URL is derived from cannot be overridden.
    *
    * Core resolves logo.url before a consumer's overrides are merged, so an
-   * override of logo.path would take and change nothing a client reads.
+   * override of logo.path would change only that key in the response, never
+   * the URL a client renders. All four source keys are locked, and a key
+   * nothing is computed from, such as favicon.mimetype, stays editable.
    */
   public function testDerivedThemeKeysAreNotOverridable(): void {
     $this->container->get('theme_installer')->install(['stark']);
@@ -238,6 +240,11 @@ class FormLogicTest extends KernelTestBase {
       $form['settings']['stark.settings:logo.path']['inherited']['#markup'],
       (string) $row['value']['#default_value']
     );
+
+    foreach (['logo.path', 'logo.use_default', 'favicon.path', 'favicon.use_default'] as $path) {
+      $this->assertTrue($form['settings']['stark.settings:' . $path]['enabled']['#disabled'], $path);
+    }
+    $this->assertFalse((bool) ($form['settings']['stark.settings:favicon.mimetype']['enabled']['#disabled'] ?? FALSE));
 
     // The URL is the one to override, so it stays editable.
     $this->assertArrayHasKey('stark.settings:logo.url', $form['settings']);
@@ -277,12 +284,12 @@ class FormLogicTest extends KernelTestBase {
   }
 
   /**
-   * A locked row ignores a submitted value, whatever it says.
+   * A stored override on a locked key keeps its value, whatever is posted.
    *
-   * A browser never sends a disabled input, and core assigns the element
-   * its default instead, which AdminUiTest pins over HTTP. This covers the
-   * case core does not: values that name the locked row anyway, whether
-   * from a rebuild, a forged post or a future change to that handling.
+   * Its checkbox stays, so it can be removed, but its value is read-only. A
+   * browser never sends a disabled input, which AdminUiTest pins over HTTP.
+   * This covers a post that names the value anyway, whether from a rebuild,
+   * a forged post or a future change to that handling.
    */
   public function testStoredOverrideOnLockedKeySurvivesSave(): void {
     $this->container->get('theme_installer')->install(['stark']);
@@ -302,9 +309,8 @@ class FormLogicTest extends KernelTestBase {
     $form_state->setValues([
       'settings' => [
         'system.site:name' => ['enabled' => 1, 'value' => 'Renamed'],
-        // Whatever Form API does with a disabled checkbox, the stored value
-        // is the one that must come back.
-        'stark.settings:logo.path' => ['enabled' => 0, 'value' => ''],
+        // Ticked, so the override stays, and the posted value is ignored.
+        'stark.settings:logo.path' => ['enabled' => 1, 'value' => 'forged.svg'],
       ],
     ]);
     $consumer_id = $consumer->id();
@@ -314,6 +320,48 @@ class FormLogicTest extends KernelTestBase {
     $stored = $this->reloadOverrides($consumer_id);
     $this->assertSame('themes/custom/brand/logo.svg', $stored['stark.settings:logo.path'] ?? NULL);
     $this->assertSame('Renamed', $stored['system.site:name'] ?? NULL);
+  }
+
+  /**
+   * A stored override on a locked key can be removed.
+   *
+   * An override stored before its key was locked, or written through the
+   * entity API, would otherwise be permanent: nothing new can be ticked on
+   * that row, but unticking what is there removes it.
+   */
+  public function testStoredOverrideOnLockedKeyCanBeRemoved(): void {
+    $this->container->get('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        'stark.settings:logo.path' => 'themes/custom/brand/logo.svg',
+      ],
+    ]);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form = $this->container->get('form_builder')
+      ->buildForm(ConsumerOverridesForm::class, $form_state);
+    $row = $form['settings']['stark.settings:logo.path'];
+    $this->assertFalse((bool) $row['enabled']['#disabled']);
+    $this->assertTrue($row['value']['#disabled']);
+    $this->assertStringContainsString('Clear the checkbox to remove it', (string) $row['enabled']['#description']);
+
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$consumer]);
+    $form_state->setValues([
+      'settings' => [
+        'stark.settings:logo.path' => ['enabled' => 0, 'value' => ''],
+      ],
+    ]);
+    $consumer_id = $consumer->id();
+    $this->container->get('form_builder')
+      ->submitForm(ConsumerOverridesForm::class, $form_state, $consumer);
+
+    $this->assertArrayNotHasKey('stark.settings:logo.path', $this->reloadOverrides($consumer_id));
   }
 
   /**

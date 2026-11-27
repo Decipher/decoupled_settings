@@ -114,13 +114,19 @@ final class ConsumerOverridesForm extends FormBase {
         // A non-scalar value has no sensible single-field widget, so it is
         // shown but not editable here rather than mangled into a string.
         $editable = $global === NULL || is_scalar($global);
-        // A key the resolved URL was derived from cannot be overridden at
-        // all: core resolves the URL before a consumer's overrides are
-        // merged, so the edit would take and change nothing a client reads.
+        // A key the resolved URL was derived from cannot be given a new
+        // override. Core resolves logo.url and favicon.url before a
+        // consumer's overrides are merged, so an override of the source
+        // changes only its own key in the response, never the URL a client
+        // renders.
         $derived = $this->isDerivedKey($name, $path);
         if ($derived) {
           $editable = FALSE;
         }
+        // One stored before the key was locked, or written through the
+        // entity API, keeps its checkbox, so it can be removed. Nothing new
+        // can be ticked, and the value stays read-only.
+        $removable = $derived && $overridden;
         $row = ['#tree' => TRUE];
 
         $row['label'] = ['#markup' => $key];
@@ -130,8 +136,8 @@ final class ConsumerOverridesForm extends FormBase {
           '#default_value' => $overridden,
           '#title' => $this->t('Override @key', ['@key' => $key]),
           '#title_display' => 'invisible',
-          '#disabled' => !$editable,
-          '#description' => $this->rowNote($editable, $derived),
+          '#disabled' => !$editable && !$removable,
+          '#description' => $this->rowNote($editable, $derived, $removable),
         ];
         $row['value'] = $this->valueWidget($key, $global, $overridden ? $overrides[$key] : NULL, $editable);
 
@@ -211,6 +217,11 @@ final class ConsumerOverridesForm extends FormBase {
         unset($overrides[$key]);
         continue;
       }
+      // A ticked row whose value nobody can type into keeps what is stored.
+      // Its only decision is whether to remove the override.
+      if (!empty($form['settings'][$key]['value']['#disabled'])) {
+        continue;
+      }
       $overrides[$key] = $this->castToGlobalType($key, (string) $row['value'], $globals);
     }
 
@@ -281,9 +292,12 @@ final class ConsumerOverridesForm extends FormBase {
   /**
    * Says why a row cannot be overridden, or nothing when it can.
    */
-  protected function rowNote(bool $editable, bool $derived): ?TranslatableMarkup {
+  protected function rowNote(bool $editable, bool $derived, bool $removable = FALSE): ?TranslatableMarkup {
     if ($editable) {
       return NULL;
+    }
+    if ($removable) {
+      return $this->t('Derived: this stored override changes only this key, not the resolved URL. Clear the checkbox to remove it, and override the resolved URL instead.');
     }
 
     return $derived

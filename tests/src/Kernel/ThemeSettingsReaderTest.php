@@ -156,6 +156,20 @@ class ThemeSettingsReaderTest extends KernelTestBase {
   }
 
   /**
+   * The derived source keys are what the resolved URLs are computed from.
+   *
+   * A key nothing is computed from, such as favicon.mimetype, is not one:
+   * an override of it reaches the response and is read.
+   */
+  public function testDerivedSourceKeysAreTheUrlSources(): void {
+    $keys = $this->reader->derivedSourceKeys();
+
+    $this->assertSame(['logo.path', 'logo.use_default', 'favicon.path', 'favicon.use_default'], $keys);
+    $this->assertNotContains('favicon.mimetype', $keys);
+    $this->assertNotContains('logo.url', $keys);
+  }
+
+  /**
    * Reading a theme that is not installed does not error.
    */
   public function testReadUninstalledThemeIsSafe(): void {

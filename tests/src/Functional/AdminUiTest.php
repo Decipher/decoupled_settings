@@ -221,6 +221,29 @@ class AdminUiTest extends BrowserTestBase {
   }
 
   /**
+   * A stored override on a locked row can be unticked in the browser.
+   */
+  public function testStoredOverrideOnLockedRowCanBeRemovedInTheBrowser(): void {
+    $this->config('decoupled_settings.settings')
+      ->set('expose_theme_settings', TRUE)
+      ->save();
+    $theme = $this->config('system.theme')->get('default') . '.settings';
+    $consumer = $this->createConsumer([
+      SettingsResolver::OVERRIDE_FIELD => [
+        $theme . ':logo.path' => 'themes/custom/brand/logo.svg',
+      ],
+    ]);
+    $path = '/admin/config/services/consumer/' . $consumer->id() . '/decoupled-settings';
+
+    $this->drupalGet($path);
+    $this->submitForm([
+      'settings[' . $theme . ':logo.path][enabled]' => FALSE,
+    ], 'Save overrides');
+
+    $this->assertArrayNotHasKey($theme . ':logo.path', $this->reloadOverrides($consumer->id()));
+  }
+
+  /**
    * Unticking a setting removes the override rather than blanking it.
    */
   public function testUntickingClearsTheOverride(): void {
